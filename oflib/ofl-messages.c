@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil    
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #include <stdlib.h>
@@ -55,8 +55,6 @@ ofl_msg_free_error(struct ofl_msg_error *msg) {
     return 0;
 }
 
-
-
 static int
 ofl_msg_free_stats_request(struct ofl_msg_stats_request_header *msg, struct ofl_exp *exp) {
     switch (msg->type) {
@@ -73,6 +71,7 @@ ofl_msg_free_stats_request(struct ofl_msg_stats_request_header *msg, struct ofl_
         case OFPST_QUEUE:
         case OFPST_GROUP:
         case OFPST_GROUP_DESC:
+        case OFPST_GROUP_FEATURES:
             break;
         case OFPST_EXPERIMENTER: {
             if (exp == NULL || exp->stats == NULL || exp->stats->req_free == NULL) {
@@ -149,6 +148,9 @@ ofl_msg_free_stats_reply(struct ofl_msg_stats_reply_header *msg, struct ofl_exp 
             exp->stats->reply_free(msg);
             return 0;
         }
+        case OFPST_GROUP_FEATURES:{
+            break;
+        }
         default: {
             return -1;
         }
@@ -162,8 +164,10 @@ ofl_msg_free_stats_reply(struct ofl_msg_stats_reply_header *msg, struct ofl_exp 
 
 int
 ofl_msg_free(struct ofl_msg_header *msg, struct ofl_exp *exp) {
+     
     switch (msg->type) {
         case OFPT_HELLO: {
+              
             break;
         }
         case OFPT_ERROR: {
@@ -186,6 +190,7 @@ ofl_msg_free(struct ofl_msg_header *msg, struct ofl_exp *exp) {
             break;
         }
         case OFPT_FEATURES_REPLY: {
+            
             struct ofl_msg_features_reply *rep = (struct ofl_msg_features_reply *)msg;
             OFL_UTILS_FREE_ARR_FUN(rep->ports, rep->ports_num,
                                    ofl_structs_free_port);
@@ -203,6 +208,7 @@ ofl_msg_free(struct ofl_msg_header *msg, struct ofl_exp *exp) {
             break;
         }
         case OFPT_PACKET_IN: {
+            ofl_structs_free_match(((struct ofl_msg_packet_in *)msg)->match,NULL);
             free(((struct ofl_msg_packet_in *)msg)->data);
             break;
         }
@@ -238,6 +244,10 @@ ofl_msg_free(struct ofl_msg_header *msg, struct ofl_exp *exp) {
         case OFPT_QUEUE_GET_CONFIG_REQUEST: {
             break;
         }
+        case OFPT_ROLE_REPLY:
+        case OFPT_ROLE_REQUEST:{
+            break;
+        }
         case OFPT_QUEUE_GET_CONFIG_REPLY: {
             struct ofl_msg_queue_get_config_reply *mod =
                                 (struct ofl_msg_queue_get_config_reply *)msg;
@@ -246,6 +256,7 @@ ofl_msg_free(struct ofl_msg_header *msg, struct ofl_exp *exp) {
             break;
         }
     }
+    
     free(msg);
     return 0;
 }

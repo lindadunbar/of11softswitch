@@ -1,4 +1,5 @@
-/* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+/* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary 
+ * Copyright (c) 2012, CPqD, Brazil
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #include <stdlib.h>
@@ -42,21 +42,17 @@ OFL_LOG_INIT(LOG_MODULE)
 void
 ofl_actions_free(struct ofl_action_header *act, struct ofl_exp *exp) {
     switch (act->type) {
+        case OFPAT_SET_FIELD:{
+            struct ofl_action_set_field *a = (struct ofl_action_set_field*) act;
+            free(a->field->value);
+            free(a->field);
+            free(a);
+            return;
+            break;        
+        }
         case OFPAT_OUTPUT:
-        case OFPAT_SET_VLAN_VID:
-        case OFPAT_SET_VLAN_PCP:
-        case OFPAT_SET_DL_SRC:
-        case OFPAT_SET_DL_DST:
-        case OFPAT_SET_NW_SRC:
-        case OFPAT_SET_NW_DST:
-        case OFPAT_SET_NW_TOS:
-        case OFPAT_SET_NW_ECN:
-        case OFPAT_SET_TP_SRC:
-        case OFPAT_SET_TP_DST:
         case OFPAT_COPY_TTL_OUT:
         case OFPAT_COPY_TTL_IN:
-        case OFPAT_SET_MPLS_LABEL:
-        case OFPAT_SET_MPLS_TC:
         case OFPAT_SET_MPLS_TTL:
         case OFPAT_DEC_MPLS_TTL:
         case OFPAT_PUSH_VLAN:
@@ -94,7 +90,6 @@ ofl_utils_count_ofp_actions(void *data, size_t data_len, size_t *count) {
     /* this is needed so that buckets are handled correctly */
     while (data_len >= sizeof(struct ofp_action_header)) {
         act = (struct ofp_action_header *)d;
-
         if (data_len < ntohs(act->len) || ntohs(act->len) < sizeof(struct ofp_action_header)) {
             OFL_LOG_WARN(LOG_MODULE, "Received action has invalid length.");
             return ofl_error(OFPET_BAD_ACTION, OFPBAC_BAD_LEN);

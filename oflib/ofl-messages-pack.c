@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #include <stdlib.h>
@@ -78,6 +78,20 @@ ofl_msg_pack_echo(struct ofl_msg_echo *msg, uint8_t **buf, size_t *buf_len) {
     return 0;
 }
 
+static int
+ofl_msg_pack_role_request(struct ofl_msg_role_request *msg, uint8_t **buf, size_t *buf_len) {
+        struct ofp_role_request *req;
+
+        *buf_len = sizeof(struct ofp_role_request);
+        *buf     = (uint8_t *)malloc(*buf_len);
+
+        req = (struct ofp_role_request *)(*buf);
+        req->role =  htonl(msg->role);
+        memset(req->pad,0,sizeof(req->pad));
+        req->generation_id = hton64(msg->generation_id);
+
+        return 0;
+}
 
 static int
 ofl_msg_pack_features_reply(struct ofl_msg_features_reply *msg, uint8_t **buf, size_t *buf_len) {
@@ -136,22 +150,28 @@ ofl_msg_pack_set_config(struct ofl_msg_set_config *msg, uint8_t **buf, size_t *b
 static int
 ofl_msg_pack_packet_in(struct ofl_msg_packet_in *msg, uint8_t **buf, size_t *buf_len) {
     struct ofp_packet_in *packet_in;
-
-    *buf_len = sizeof(struct ofp_packet_in) + msg->data_length;
+    uint8_t *ptr;
+    
+    *buf_len = sizeof(struct ofp_packet_in) + ROUND_UP(msg->match->length - 4 ,8) + msg->data_length + 2;
     *buf     = (uint8_t *)malloc(*buf_len);
-
     packet_in = (struct ofp_packet_in *)(*buf);
     packet_in->buffer_id   = htonl(msg->buffer_id);
-    packet_in->in_port     = htonl(msg->in_port);
-    packet_in->in_phy_port = htonl(msg->in_phy_port);
     packet_in->total_len   = htons(msg->total_len);
     packet_in->reason      =       msg->reason;
     packet_in->table_id    =       msg->table_id;
 
-    if (msg->data_length > 0) {
-        memcpy(packet_in->data, msg->data, msg->data_length);
-    }
+    ptr = (*buf) + (sizeof(struct ofp_packet_in) - 4);
+    ofl_structs_match_pack(msg->match,&(packet_in->match),ptr, NETWORK_ORDER, NULL);
+    ptr = (*buf) + ROUND_UP((sizeof(struct ofp_packet_in)-4) + msg->match->length,8);
+    /*padding bytes*/
 
+    memset(ptr,0,2); 
+    /* Ethernet frame */
+    if (msg->data_length > 0) {
+        memcpy(ptr + 2 , msg->data, msg->data_length);
+        
+    }
+    
     return 0;
 }
 
@@ -159,7 +179,8 @@ static int
 ofl_msg_pack_flow_removed(struct ofl_msg_flow_removed *msg, uint8_t **buf, size_t *buf_len, struct ofl_exp *exp) {
     struct ofp_flow_removed *ofr;
 
-    *buf_len = sizeof(struct ofp_flow_removed);
+    uint8_t *ptr;
+    *buf_len = ROUND_UP((sizeof(struct ofp_flow_removed) -4) + msg->stats->match->length ,8);
     *buf     = (uint8_t *)malloc(*buf_len);
 
     ofr = (struct ofp_flow_removed *)(*buf);
@@ -170,11 +191,12 @@ ofl_msg_pack_flow_removed(struct ofl_msg_flow_removed *msg, uint8_t **buf, size_
     ofr->duration_sec  = htonl( msg->stats->duration_sec);
     ofr->duration_nsec = htonl( msg->stats->duration_nsec);
     ofr->idle_timeout  = htons( msg->stats->idle_timeout);
-    memset(ofr->pad2, 0x00, 2);
     ofr->packet_count  = hton64(msg->stats->packet_count);
     ofr->byte_count    = hton64(msg->stats->byte_count);
+    
+    ptr = (*buf) + (sizeof(struct ofp_flow_removed) - 4);
 
-    ofl_structs_match_pack(msg->stats->match, &(ofr->match), exp);
+    ofl_structs_match_pack(msg->stats->match, &(ofr->match),ptr, HOST_ORDER, exp);
 
     return 0;
 }
@@ -216,7 +238,7 @@ ofl_msg_pack_packet_out(struct ofl_msg_packet_out *msg, uint8_t **buf, size_t *b
     ptr = (*buf) + sizeof(struct ofp_packet_out);
 
     for (i=0; i<msg->actions_num; i++) {
-        ptr += ofl_actions_pack(msg->actions[i], (struct ofp_action_header *)ptr, exp);
+        ptr += ofl_actions_pack(msg->actions[i], (struct ofp_action_header *)ptr,*buf, exp);
     }
 
     if (msg->data_length > 0) {
@@ -230,11 +252,13 @@ static int
 ofl_msg_pack_flow_mod(struct ofl_msg_flow_mod *msg, uint8_t **buf, size_t *buf_len, struct ofl_exp *exp) {
     struct ofp_flow_mod *flow_mod;
     uint8_t *ptr;
+    
     int i;
 
-    *buf_len = sizeof(struct ofp_flow_mod) + ofl_structs_instructions_ofp_total_len(msg->instructions, msg->instructions_num, exp);;
-    *buf     = (uint8_t *)malloc(*buf_len);
+    *buf_len = ROUND_UP(sizeof(struct ofp_flow_mod)- 4 + msg->match->length,8) + 
+                ofl_structs_instructions_ofp_total_len(msg->instructions, msg->instructions_num, exp);
 
+    *buf     = (uint8_t *)malloc(*buf_len);
     flow_mod = (struct ofp_flow_mod *)(*buf);
     flow_mod->cookie       = hton64(msg->cookie);
     flow_mod->cookie_mask  = hton64(msg->cookie_mask);
@@ -243,20 +267,20 @@ ofl_msg_pack_flow_mod(struct ofl_msg_flow_mod *msg, uint8_t **buf, size_t *buf_l
     flow_mod->idle_timeout = htons( msg->idle_timeout);
     flow_mod->hard_timeout = htons( msg->hard_timeout);
     flow_mod->priority     = htons( msg->priority);
+    flow_mod->importance     = htons( msg->importance); //modified by dingwanfu.
     flow_mod->buffer_id    = htonl( msg->buffer_id);
     flow_mod->out_port     = htonl( msg->out_port);
     flow_mod->out_group    = htonl( msg->out_group);
     flow_mod->flags        = htons( msg->flags);
-    memset(flow_mod->pad, 0x00, 2);
-
-    ofl_structs_match_pack(msg->match, &(flow_mod->match), exp);
-
-    ptr = (*buf) + sizeof(struct ofp_flow_mod);
-
+//    memset(flow_mod->pad, 0x00, 2); //modified by dingwanfu.
+    
+    ptr  = (*buf) + sizeof(struct ofp_flow_mod)- 4; 
+    ofl_structs_match_pack(msg->match, &(flow_mod->match), ptr, HOST_ORDER, exp);
+    /* We advance counting the padded bytes */
+    ptr = (*buf) + ROUND_UP(sizeof(struct ofp_flow_mod)- 4 + msg->match->length,8);
     for (i=0; i<msg->instructions_num; i++) {
         ptr += ofl_structs_instructions_pack(msg->instructions[i], (struct ofp_instruction *)ptr, exp);
     }
-
     return 0;
 }
 
@@ -321,10 +345,12 @@ ofl_msg_pack_table_mod(struct ofl_msg_table_mod *msg, uint8_t **buf, size_t *buf
 
 static int
 ofl_msg_pack_stats_request_flow(struct ofl_msg_stats_request_flow *msg, uint8_t **buf, size_t *buf_len, struct ofl_exp *exp) {
+    
     struct ofp_stats_request *req;
     struct ofp_flow_stats_request *stats;
+    uint8_t *ptr;
 
-    *buf_len = sizeof(struct ofp_stats_request) + sizeof(struct ofp_flow_stats_request);
+    *buf_len = sizeof(struct ofp_stats_request) + sizeof(struct ofp_flow_stats_request) + msg->match->length;
     *buf     = (uint8_t *)malloc(*buf_len);
 
     req = (struct ofp_stats_request *)(*buf);
@@ -336,8 +362,9 @@ ofl_msg_pack_stats_request_flow(struct ofl_msg_stats_request_flow *msg, uint8_t 
     memset(stats->pad2, 0x00, 4);
     stats->cookie      = hton64(msg->cookie);
     stats->cookie_mask = hton64(msg->cookie_mask);
-
-    ofl_structs_match_pack(msg->match, &(stats->match), exp);
+    
+    ptr = (*buf) + sizeof(struct ofp_stats_request) + sizeof(struct ofp_flow_stats_request);
+    ofl_structs_match_pack(msg->match, &(stats->match),ptr, HOST_ORDER, exp);
 
     return 0;
 }
@@ -435,6 +462,10 @@ ofl_msg_pack_stats_request(struct ofl_msg_stats_request_header *msg, uint8_t **b
         error = ofl_msg_pack_stats_request_empty(msg, buf, buf_len);
         break;
     }
+    case OFPST_GROUP_FEATURES: {
+        error = ofl_msg_pack_stats_request_empty(msg, buf, buf_len);
+        break;
+    }    
     case OFPST_EXPERIMENTER: {
         if (exp == NULL || exp->stats == NULL || exp->stats->req_pack == NULL) {
             OFL_LOG_WARN(LOG_MODULE, "Trying to pack experimenter stat req, but no callback was given.");
@@ -487,18 +518,15 @@ static int
 ofl_msg_pack_stats_reply_flow(struct ofl_msg_stats_reply_flow *msg, uint8_t **buf, size_t *buf_len, struct ofl_exp *exp) {
     struct ofp_stats_reply *resp;
     size_t i;
-    uint8_t *data;
+    uint8_t * data;
 
     *buf_len = sizeof(struct ofp_stats_reply) + ofl_structs_flow_stats_ofp_total_len(msg->stats, msg->stats_num, exp);
     *buf     = (uint8_t *)malloc(*buf_len);
-
     resp = (struct ofp_stats_reply *)(*buf);
-    data = (uint8_t *)resp->body;
-
+    data = (uint8_t*) resp->body; 
     for (i=0; i<msg->stats_num; i++) {
-        data += ofl_structs_flow_stats_pack(msg->stats[i], (struct ofp_flow_stats *)data, exp);
+        data += ofl_structs_flow_stats_pack(msg->stats[i], data, exp);
     }
-
     return 0;
 }
 
@@ -612,6 +640,25 @@ ofl_msg_pack_stats_reply_group_desc(struct ofl_msg_stats_reply_group_desc *msg, 
     return 0;
 }
 
+static int
+ofl_msg_pack_stats_reply_group_features(struct ofl_msg_stats_reply_group_features *msg, uint8_t **buf, size_t *buf_len) {
+    struct ofp_stats_reply *resp;
+    struct ofp_group_features_stats *stats;
+    int i;
+    *buf_len = sizeof(struct ofp_stats_reply) + sizeof(struct ofp_group_features_stats);
+    *buf     = (uint8_t *)malloc(*buf_len);
+
+    resp = (struct ofp_stats_reply *)(*buf);
+    stats = (struct ofp_group_features_stats *)resp->body;
+    stats->types = htonl(msg->types);
+    stats->capabilities = htonl(msg->capabilities);
+    for(i = 0; i < 4; i++){
+        stats->max_groups[i] = htonl(msg->max_groups[i]);
+        stats->actions[i] = htonl(msg->actions[i]);
+    }
+
+    return 0;
+}
 
 static int
 ofl_msg_pack_stats_reply(struct ofl_msg_stats_reply_header *msg, uint8_t **buf, size_t *buf_len, struct ofl_exp *exp) {
@@ -649,6 +696,10 @@ ofl_msg_pack_stats_reply(struct ofl_msg_stats_reply_header *msg, uint8_t **buf, 
         }
         case OFPST_GROUP_DESC: {
             error = ofl_msg_pack_stats_reply_group_desc((struct ofl_msg_stats_reply_group_desc *)msg, buf, buf_len, exp);
+            break;
+        }
+        case OFPST_GROUP_FEATURES:{
+            error = ofl_msg_pack_stats_reply_group_features((struct ofl_msg_stats_reply_group_features *) msg, buf, buf_len);
             break;
         }
         case OFPST_EXPERIMENTER: {
@@ -840,12 +891,15 @@ ofl_msg_pack(struct ofl_msg_header *msg, uint32_t xid, uint8_t **buf, size_t *bu
             error = ofl_msg_pack_queue_get_config_reply((struct ofl_msg_queue_get_config_reply *)msg, buf, buf_len);
             break;
         }
+        case OFPT_ROLE_REQUEST:
+        case OFPT_ROLE_REPLY:
+            error = ofl_msg_pack_role_request((struct ofl_msg_role_request*)msg, buf, buf_len);
         default: {
             OFL_LOG_WARN(LOG_MODULE, "Trying to pack unknown message type.");
             error = -1;
         }
     }
-
+        
     if (error) {
         return error;
         // TODO Zoltan: free buffer?

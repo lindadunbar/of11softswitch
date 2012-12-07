@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #ifndef OFL_MESSAGES_H
@@ -118,6 +118,12 @@ struct ofl_msg_set_config {
     struct ofl_config  *config;
 };
 
+/* Role request and reply message. */
+struct ofl_msg_role_request {
+	struct ofl_msg_header header; /* Type OFPT_ROLE_REQUEST/OFPT_ROLE_REPLY. */
+	uint32_t role;            /* One of OFPCR_ROLE_*. */
+	uint64_t generation_id;   /* Master Election Generation Id */
+};
 
 /************************
  * Asynchronous messages
@@ -127,12 +133,10 @@ struct ofl_msg_packet_in {
     struct ofl_msg_header   header; /* OFPT_PACKET_IN */
 
     uint32_t                    buffer_id;   /* ID assigned by datapath. */
-    uint32_t                    in_port;     /* Port on which frame was received. */
-    uint32_t                    in_phy_port; /* Physical Port on which frame was received. */
     uint16_t                    total_len;   /* Full length of frame. */
     enum ofp_packet_in_reason   reason;      /* Reason packet is being sent (one of OFPR_*) */
     uint8_t                     table_id;    /* ID of the table that was looked up */
-
+    struct ofl_match_header     *match;
     size_t     data_length;
     uint8_t   *data;
 };
@@ -182,6 +186,9 @@ struct ofl_msg_flow_mod {
     enum ofp_flow_mod_command       command;      /* One of OFPFC_*. */
     uint16_t                        idle_timeout; /* Idle time before discarding (secs). */
     uint16_t                        hard_timeout; /* Max time before discarding (secs). */
+
+    uint16_t                        importance;  /* Importance of flow table. modified by dingwanfu */
+	
     uint16_t                        priority;     /* Priority level of flow entry. */
     uint32_t                        buffer_id;    /* Buffered packet to apply to (or -1).
                                                     Not meaningful for OFPFC_DELETE*. */
@@ -363,6 +370,16 @@ struct ofl_msg_stats_reply_group_desc {
     size_t                        stats_num;
     struct ofl_group_desc_stats **stats;
 };
+
+struct ofl_msg_stats_reply_group_features {
+    struct ofl_msg_stats_reply_header   header; /* OFPST_GROUP_FEATURES */
+
+    uint32_t types;
+    uint32_t capabilities;
+    uint32_t max_groups[4];
+    uint32_t actions[4];
+};
+
 
 struct ofl_msg_stats_reply_experimenter {
     struct ofl_msg_stats_reply_header   header; /* OFPST_EXPERIMENTER */

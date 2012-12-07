@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #include <stdbool.h>
@@ -111,10 +111,6 @@ static void
 ofl_msg_print_packet_in(struct ofl_msg_packet_in *msg, FILE *stream) {
     fprintf(stream, "{buffer=\"");
     ofl_buffer_print(stream, msg->buffer_id);
-    fprintf(stream, "\", port=\"");
-    ofl_port_print(stream, msg->in_port);
-    fprintf(stream, "\", phy_port=\"");
-    ofl_port_print(stream, msg->in_phy_port);
     fprintf(stream, "\", tlen=\"%u\", reas=\"", msg->total_len);
     ofl_packet_in_reason_print(stream, msg->reason);
     fprintf(stream, "\", table=\"");
@@ -168,9 +164,9 @@ ofl_msg_print_flow_mod(struct ofl_msg_flow_mod *msg, FILE *stream, struct ofl_ex
     fprintf(stream, "\", cmd=\"");
     ofl_flow_mod_command_print(stream, msg->command);
     fprintf(stream, "\", cookie=\"0x%"PRIx64"\", mask=\"0x%"PRIx64"\", "
-                          "idle=\"%u\", hard=\"%u\", prio=\"%u\", buf=\"",
+                          "idle=\"%u\", hard=\"%u\", prio=\"%u\", impo=\"%u\", buf=\"", //modified by dingwanfu.
                   msg->cookie, msg->cookie_mask,
-                  msg->idle_timeout, msg->hard_timeout, msg->priority);
+                  msg->idle_timeout, msg->hard_timeout, msg->priority, msg->importance);//modified by dingwanfu.
     ofl_buffer_print(stream, msg->buffer_id);
     fprintf(stream, "\", port=\"");
     ofl_port_print(stream, msg->out_port);
@@ -179,7 +175,6 @@ ofl_msg_print_flow_mod(struct ofl_msg_flow_mod *msg, FILE *stream, struct ofl_ex
     fprintf(stream, "\", flags=\"0x%"PRIx16"\", match=",msg->flags);
     ofl_structs_match_print(stream, msg->match, exp);
     fprintf(stream, ", insts=[");
-
     for(i=0; i<msg->instructions_num; i++) {
         ofl_structs_instruction_print(stream, msg->instructions[i], exp);
         if (i < msg->instructions_num - 1) { fprintf(stream, ", "); }
@@ -313,6 +308,9 @@ ofl_msg_print_stats_request(struct ofl_msg_stats_request_header *msg, FILE *stre
         case OFPST_GROUP_DESC: {
             break;
         }
+        case OFPST_GROUP_FEATURES:{
+            break;
+        }
         case OFPST_EXPERIMENTER: {
             ofl_msg_print_stats_request_experimenter((struct ofl_msg_stats_request_experimenter *)msg, stream);
         }
@@ -416,6 +414,13 @@ ofl_msg_print_stats_reply_group_desc(struct ofl_msg_stats_reply_group_desc *msg,
     fprintf(stream, "]");
 }
 
+static void ofl_msg_print_stats_reply_group_features(struct ofl_msg_stats_reply_group_features *msg, FILE *stream){
+
+    fprintf(stream, ", types=\"%d\", capabilities=\"%d",
+                  msg->types, msg->capabilities);
+
+}
+
 static void
 ofl_msg_print_stats_reply_experimenter(struct ofl_msg_stats_reply_experimenter *msg, FILE *stream) {
     fprintf(stream, ", exp_id=\"");
@@ -473,6 +478,10 @@ ofl_msg_print_stats_reply(struct ofl_msg_stats_reply_header *msg, FILE *stream, 
             ofl_msg_print_stats_reply_group_desc((struct ofl_msg_stats_reply_group_desc *)msg, stream, exp);
             break;
         }
+        case OFPST_GROUP_FEATURES:{
+            ofl_msg_print_stats_reply_group_features((struct ofl_msg_stats_reply_group_features *)msg, stream);
+            break;
+        }
         case OFPST_EXPERIMENTER: {
             ofl_msg_print_stats_reply_experimenter((struct ofl_msg_stats_reply_experimenter *)msg, stream);
             break;
@@ -505,6 +514,12 @@ ofl_msg_print_queue_get_config_reply(struct ofl_msg_queue_get_config_reply *msg,
     fprintf(stream, "]}");
 }
 
+static void 
+ofl_msg_print_role_msg(struct ofl_msg_role_request *msg, FILE *stream){
+    
+    fprintf(stream, "{role= %d, generation_id= %lld}", msg->role, msg->generation_id);
+
+}
 
 char *
 ofl_msg_to_string(struct ofl_msg_header *msg, struct ofl_exp *exp) {
@@ -564,6 +579,11 @@ ofl_msg_print(FILE *stream, struct ofl_msg_header *msg, struct ofl_exp *exp) {
         case OFPT_BARRIER_REQUEST: { return; }
         case OFPT_BARRIER_REPLY: { return; }
 
+        /*Role messages */
+        case OFPT_ROLE_REQUEST:
+        case OFPT_ROLE_REPLY:{
+            ofl_msg_print_role_msg((struct ofl_msg_role_request*)msg, stream);        
+        }
         /* Queue Configuration messages. */
         case OFPT_QUEUE_GET_CONFIG_REQUEST: { ofl_msg_print_queue_get_config_request((struct ofl_msg_queue_get_config_request *)msg, stream); return; }
         case OFPT_QUEUE_GET_CONFIG_REPLY: { ofl_msg_print_queue_get_config_reply((struct ofl_msg_queue_get_config_reply *)msg, stream); return; }
