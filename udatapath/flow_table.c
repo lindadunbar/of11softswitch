@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil 
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,8 +26,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *
- * Author: Zolt谩n Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #include <stdbool.h>
@@ -38,8 +37,7 @@
 #include "flow_entry.h"
 #include "oflib/ofl.h"
 #include "time.h"
-#include "packet_handle_std.h"
-#include "match_std.h"
+//#include "packet_handle_std.h"
 
 #include "vlog.h"
 #define LOG_MODULE VLM_flow_t
@@ -99,9 +97,20 @@ flow_table_add(struct flow_table *table, struct ofl_msg_flow_mod *mod, bool chec
         }
     }
 
+#if 0
     if (table->stats->active_count == FLOW_TABLE_MAX_ENTRIES) {
         return ofl_error(OFPET_FLOW_MOD_FAILED, OFPFMFC_TABLE_FULL);
     }
+#endif
+
+    if (table->stats->active_count == FLOW_TABLE_MAX_ENTRIES) {
+
+	return flow_table_eviction_importance(table,  mod, match_kept, insts_kept );
+	   	//* modified by dingwanfu.
+		
+    }
+
+	
     table->stats->active_count++;
 
     new_entry = flow_entry_create(table->dp, table, mod);
@@ -114,25 +123,49 @@ flow_table_add(struct flow_table *table, struct ofl_msg_flow_mod *mod, bool chec
     return 0;
 }
 
-/* Handles flow mod messages with MODIFY command. */
-static ofl_err
-flow_table_modify(struct flow_table *table, struct ofl_msg_flow_mod *mod, bool strict, bool *match_kept, bool *insts_kept) {
-    struct flow_entry *entry;
-    bool match_found;
 
-    match_found = false;
+/* modified by dingwanfu. */
+ofl_err 
+flow_table_eviction_importance(struct flow_table *table,  struct ofl_msg_flow_mod *mod, bool *match_kept, bool *insts_kept ){ 
+	struct flow_entry *entry, * tmp_entry, *new_entry; 
+	uint16_t min_imp= 0xFFFF;
+
+	LIST_FOR_EACH (entry, struct flow_entry, match_node, &table->match_entries) { 
+		if (entry->stats->importance < min_imp) {
+					//需要在ofl_flow_stats结构中添加importance域
+			min_imp = entry->stats->importance;
+			tmp_entry = entry;
+		}
+	}
+ 		if (min_imp < mod->importance) {
+					//需要在ofl_msg_flow_mod结构中添加importance域
+			table->stats->active_count++;
+					//modified by dingwanfu.
+			new_entry = flow_entry_create(table->dp, table, mod); 
+			*match_kept = true;
+    			*insts_kept = true;
+			
+			list_insert(&tmp_entry->match_node, &new_entry->match_node); 
+			flow_entry_remove(tmp_entry, OFPRR_EVICTION_IMPORTANCE) ;
+     		      add_to_timeout_lists(table, new_entry);
+			return 0;
+		}else{
+			return ofl_error(OFPET_FLOW_MOD_FAILED, OFPFMFC_TABLE_FULL); 
+		}
+}
+
+
+/* Handles flow mod messages with MODIFY command. 
+    If the flow doesn't exists don't do nothing*/
+static ofl_err
+flow_table_modify(struct flow_table *table, struct ofl_msg_flow_mod *mod, bool strict, bool *insts_kept) {
+    struct flow_entry *entry;
 
     LIST_FOR_EACH (entry, struct flow_entry, match_node, &table->match_entries) {
         if (flow_entry_matches(entry, mod, strict, true/*check_cookie*/)) {
             flow_entry_replace_instructions(entry, mod->instructions_num, mod->instructions);
             *insts_kept = true;
-            match_found = true;
         }
-    }
-
-    /* NOTE: if modify does not modify any entries, it acts like an add according to spec. */
-    if (!match_found) {
-        return flow_table_add(table, mod, false, match_kept, insts_kept);
     }
 
     return 0;
@@ -145,7 +178,7 @@ flow_table_delete(struct flow_table *table, struct ofl_msg_flow_mod *mod, bool s
 
     LIST_FOR_EACH_SAFE (entry, next, struct flow_entry, match_node, &table->match_entries) {
         if (flow_entry_matches(entry, mod, strict, true/*check_cookie*/)) {
-            flow_entry_remove(entry, OFPRR_DELETE);
+             flow_entry_remove(entry, OFPRR_DELETE);
         }
     }
 
@@ -161,10 +194,10 @@ flow_table_flow_mod(struct flow_table *table, struct ofl_msg_flow_mod *mod, bool
             return flow_table_add(table, mod, overlap, match_kept, insts_kept);
         }
         case (OFPFC_MODIFY): {
-            return flow_table_modify(table, mod, false, match_kept, insts_kept);
+            return flow_table_modify(table, mod, false, insts_kept);
         }
         case (OFPFC_MODIFY_STRICT): {
-            return flow_table_modify(table, mod, true, match_kept, insts_kept);
+            return flow_table_modify(table, mod, true, insts_kept);
         }
         case (OFPFC_DELETE): {
             return flow_table_delete(table, mod, false);
@@ -192,9 +225,9 @@ flow_table_lookup(struct flow_table *table, struct packet *pkt) {
 
         /* select appropriate handler, based on match type of flow entry. */
         switch (m->type) {
-            case (OFPMT_STANDARD): {
-                if (packet_handle_std_match(pkt->handle_std,
-                                            (struct ofl_match_standard *)m)) {
+            case (OFPMT_OXM): {
+               if (packet_handle_std_match(pkt->handle_std,
+                                            (struct ofl_match *)m)) {
                     entry->stats->byte_count += pkt->buffer->size;
                     entry->stats->packet_count++;
                     entry->last_used = time_msec();
@@ -203,6 +236,8 @@ flow_table_lookup(struct flow_table *table, struct packet *pkt) {
 
                     return entry;
                 }
+                break;
+
                 break;
             }
             default: {
@@ -246,7 +281,6 @@ flow_table_create(struct datapath *dp, uint8_t table_id) {
     table->stats = xmalloc(sizeof(struct ofl_table_stats));
     table->stats->table_id      = table_id;
     table->stats->name          = ds_cstr(&string);
-    table->stats->wildcards     = DP_SUPPORTED_WILDCARDS;
     table->stats->match         = DP_SUPPORTED_MATCH_FIELDS;
     table->stats->instructions  = DP_SUPPORTED_INSTRUCTIONS;
     table->stats->write_actions = DP_SUPPORTED_ACTIONS;
@@ -285,8 +319,8 @@ flow_table_stats(struct flow_table *table, struct ofl_msg_stats_request_flow *ms
     LIST_FOR_EACH(entry, struct flow_entry, match_node, &table->match_entries) {
         if ((msg->out_port == OFPP_ANY || flow_entry_has_out_port(entry, msg->out_port)) &&
             (msg->out_group == OFPG_ANY || flow_entry_has_out_group(entry, msg->out_group)) &&
-            match_std_nonstrict((struct ofl_match_standard *)msg->match,
-                                (struct ofl_match_standard *)entry->stats->match)) {
+            match_std_nonstrict((struct ofl_match *)msg->match,
+                                (struct ofl_match *)entry->stats->match)) {
 
             flow_entry_update(entry);
             if ((*stats_size) == (*stats_num)) {
@@ -306,9 +340,7 @@ flow_table_aggregate_stats(struct flow_table *table, struct ofl_msg_stats_reques
 
     LIST_FOR_EACH(entry, struct flow_entry, match_node, &table->match_entries) {
         if ((msg->out_port == OFPP_ANY || flow_entry_has_out_port(entry, msg->out_port)) &&
-            (msg->out_group == OFPG_ANY || flow_entry_has_out_group(entry, msg->out_group)) &&
-            match_std_nonstrict((struct ofl_match_standard *)msg->match,
-                                (struct ofl_match_standard *)entry->stats->match)) {
+            (msg->out_group == OFPG_ANY || flow_entry_has_out_group(entry, msg->out_group))) {
 
             (*packet_count) += entry->stats->packet_count;
             (*byte_count)   += entry->stats->byte_count;
