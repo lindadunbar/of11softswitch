@@ -58,7 +58,6 @@
 #include <inttypes.h>
 #include <netinet/in.h>
 #include <stdlib.h>
-#include "flow.h"
 #include "ofp.h"
 #include "ofpbuf.h"
 #include "openflow/openflow.h"
@@ -193,7 +192,7 @@ make_flow_mod(uint8_t command, uint8_t table_id,
     ofm->header.type = OFPT_FLOW_MOD;
     ofm->header.length = htons(size);
     ofm->cookie = 0;
-    ofm->match.wildcards = htonl(0);
+    /*TODO fill match     
     ofm->match.in_port = flow->in_port;
     memcpy(ofm->match.dl_src, flow->dl_src, sizeof ofm->match.dl_src);
     memcpy(ofm->match.dl_dst, flow->dl_dst, sizeof ofm->match.dl_dst);
@@ -205,9 +204,10 @@ make_flow_mod(uint8_t command, uint8_t table_id,
     ofm->match.nw_proto = flow->nw_proto;
     ofm->match.nw_tos = flow->nw_tos;
     ofm->match.tp_src = flow->tp_src;
-    ofm->match.tp_dst = flow->tp_dst;
+    ofm->match.tp_dst = flow->tp_dst; */
     ofm->command = command;
     ofm->table_id = table_id;
+    
     return out;
 }
 
@@ -262,27 +262,7 @@ make_add_simple_flow(const struct flow *flow,
     }
 }
 
-struct ofpbuf *
-make_packet_in(uint32_t buffer_id, uint32_t in_port, uint8_t reason,
-               const struct ofpbuf *payload, int max_send_len)
-{
-    struct ofp_packet_in *opi;
-    struct ofpbuf *buf;
-    int send_len;
 
-    send_len = MIN(max_send_len, payload->size);
-    buf = ofpbuf_new(sizeof *opi + send_len);
-    opi = put_openflow_xid(offsetof(struct ofp_packet_in, data),
-                           OFPT_PACKET_IN, 0, buf);
-    opi->buffer_id = htonl(buffer_id);
-    opi->total_len = htons(payload->size);
-    opi->in_port = htonl(in_port);
-    opi->reason = reason;
-    ofpbuf_put(buf, payload->data, send_len);
-    update_openflow_length(buf);
-
-    return buf;
-}
 
 struct ofpbuf *
 make_packet_out(const struct ofpbuf *packet, uint32_t buffer_id,
@@ -365,6 +345,7 @@ make_echo_reply(const struct ofp_header *rq)
     return out;
 }
 
+
 static int
 check_message_type(uint8_t got_type, uint8_t want_type)
 {
@@ -398,7 +379,7 @@ check_ofp_message(const struct ofp_header *msg, uint8_t type, size_t size)
     }
 
     return 0;
-}
+} 
 
 /* Checks that 'inst' has type 'type' and that 'inst' is 'size' plus a
  * nonnegative integer multiple of 'array_elt_size' bytes long.  Returns 0 if
@@ -442,7 +423,7 @@ check_ofp_instruction_array(const struct ofp_instruction *inst, uint8_t type,
         *n_array_elts = (got_size - min_size) / array_elt_size;
     }
     return 0;
-}
+} 
 
 
 /* Checks that 'msg' has type 'type' and that 'msg' is 'size' plus a
@@ -452,7 +433,7 @@ check_ofp_instruction_array(const struct ofp_instruction *inst, uint8_t type,
  *
  * If 'n_array_elts' is nonnull, then '*n_array_elts' is set to the number of
  * 'array_elt_size' blocks in 'msg' past the first 'min_size' bytes, when
- * successful. */
+ * successful.  */
 int
 check_ofp_message_array(const struct ofp_header *msg, uint8_t type,
                         size_t min_size, size_t array_elt_size,
@@ -489,6 +470,7 @@ check_ofp_message_array(const struct ofp_header *msg, uint8_t type,
     }
     return 0;
 }
+
 
 int
 check_ofp_packet_out(const struct ofp_header *oh, struct ofpbuf *data,
@@ -534,6 +516,7 @@ check_ofp_packet_out(const struct ofp_header *oh, struct ofpbuf *data,
     return 0;
 }
 
+/*const struct ofp_flow_stats */
 const struct ofp_flow_stats *
 flow_stats_first(struct flow_stats_iterator *iter,
                  const struct ofp_stats_reply *osr)
@@ -544,6 +527,7 @@ flow_stats_first(struct flow_stats_iterator *iter,
     return flow_stats_next(iter);
 }
 
+/*const struct ofp_flow_stats */
 const struct ofp_flow_stats *
 flow_stats_next(struct flow_stats_iterator *iter)
 {
@@ -570,18 +554,21 @@ flow_stats_next(struct flow_stats_iterator *iter)
         VLOG_WARN_RL(LOG_MODULE, &rl, "flow stats length %zu but only %td bytes left",
                      length, bytes_left);
         return NULL;
-    } else if ((length - sizeof *fs) % sizeof fs->instructions[0]) {
+    } 
+    /* TODO: Change instructions 
+    else if ((length - sizeof *fs) % sizeof fs->instructions[0]) {
         VLOG_WARN_RL(LOG_MODULE, &rl, "flow stats length %zu has %zu bytes "
                      "left over in final action", length,
                      (length - sizeof *fs) % sizeof fs->instructions[0]);
         return NULL;
-    }
+    }*/
     iter->pos += length;
     return fs;
 }
 
 /* Alignment of ofp_actions. */
 #define ACTION_ALIGNMENT 8
+
 
 static int
 check_action_exact_len(const union ofp_action *a, unsigned int len,
@@ -597,7 +584,7 @@ check_action_exact_len(const union ofp_action *a, unsigned int len,
 
 /* Checks that 'port' is a valid output port for the OFPAT_OUTPUT action, given
  * that the switch will never have more than 'max_ports' ports.  Returns 0 if
- * 'port' is valid, otherwise an ofp_mkerr() return code. */
+ * 'port' is valid, otherwise an ofp_mkerr() return code.*/
 static int
 check_output_port(uint32_t port, int max_ports, bool table_allowed)
 {
@@ -624,11 +611,11 @@ check_output_port(uint32_t port, int max_ports, bool table_allowed)
         VLOG_WARN(LOG_MODULE, "unknown output port %x", port);
         return ofp_mkerr(OFPET_BAD_ACTION, OFPBAC_BAD_OUT_PORT);;
     }
-}
+} 
 
 /* Checks that 'action' is a valid OFPAT_ENQUEUE action, given that the switch
  * will never have more than 'max_ports' ports.  Returns 0 if 'port' is valid,
- * otherwise an ofp_mkerr() return code. */
+ * otherwise an ofp_mkerr() return code.*/
 static int
 check_setqueue_action(const union ofp_action *a, unsigned int len)
 {
@@ -642,9 +629,9 @@ check_setqueue_action(const union ofp_action *a, unsigned int len)
 
     oaq = (const struct ofp_action_set_queue *) a;
     return 0;
-}
+} 
 
-static int
+static int 
 check_nicira_action(const union ofp_action *a, unsigned int len)
 {
     const struct nx_action_header *nah;
@@ -660,7 +647,7 @@ check_nicira_action(const union ofp_action *a, unsigned int len)
     case NXAST_SET_TUNNEL:
         return check_action_exact_len(a, len, 16);
     default:
-        return ofp_mkerr(OFPET_BAD_ACTION, OFPBAC_BAD_EXPERIMENTER_TYPE);
+        return ofp_mkerr(OFPET_BAD_ACTION, OFPBAC_BAD_EXPERIMENTER);
     }
 }
 
@@ -681,20 +668,7 @@ check_action(const union ofp_action *a, unsigned int len, int max_ports,
         return check_output_port(ntohl(oao->port), max_ports, is_packet_out);
     }
 
-    case OFPAT_SET_VLAN_VID:
-    case OFPAT_SET_VLAN_PCP:
-    case OFPAT_POP_VLAN:
-    case OFPAT_SET_NW_SRC:
-    case OFPAT_SET_NW_DST:
-    case OFPAT_SET_NW_TOS:
-    case OFPAT_SET_TP_SRC:
-    case OFPAT_SET_TP_DST:
-        return check_action_exact_len(a, len, 8);
-
-    case OFPAT_SET_DL_SRC:
-    case OFPAT_SET_DL_DST:
-        return check_action_exact_len(a, len, 16);
-
+   
     case OFPAT_EXPERIMENTER:
         return (a->experimenter.experimenter == htonl(NX_VENDOR_ID)
                 ? check_nicira_action(a, len)
@@ -762,7 +736,7 @@ action_outputs_to_port(const union ofp_action *action, uint32_t port)
 }
 
 /* The set of actions must either come from a trusted source or have been
- * previously validated with validate_actions(). */
+ * previously validated with validate_actions().*/
 const union ofp_action *
 actions_first(struct actions_iterator *iter,
               const union ofp_action *oa, size_t n_actions)
@@ -785,120 +759,5 @@ actions_next(struct actions_iterator *iter)
     }
 }
 
-void
-normalize_match(struct ofp_match *m)
-{
-    enum { OFPFW_NW = OFPFW_NW_PROTO | OFPFW_NW_TOS };
-    enum { OFPFW_TP = OFPFW_TP_SRC | OFPFW_TP_DST };
-    uint32_t wc;
 
-    wc = ntohl(m->wildcards) & OVSFW_ALL;
-    if (wc & OFPFW_DL_TYPE) {
-        m->dl_type = 0;
 
-        /* Can't sensibly match on network or transport headers if the
-         * data link type is unknown. */
-        wc |= OFPFW_NW | OFPFW_TP;
-	m->nw_src_mask = m->nw_dst_mask = 0xFFFFFFFF;
-        m->nw_src = m->nw_dst = m->nw_proto = m->nw_tos = 0;
-        m->tp_src = m->tp_dst = 0;
-    } else if (m->dl_type == htons(ETH_TYPE_IP)) {
-        if (wc & OFPFW_NW_PROTO) {
-            m->nw_proto = 0;
-
-            /* Can't sensibly match on transport headers if the network
-             * protocol is unknown. */
-            wc |= OFPFW_TP;
-            m->tp_src = m->tp_dst = 0;
-        } else if (m->nw_proto == IPPROTO_TCP ||
-                   m->nw_proto == IPPROTO_UDP ||
-                   m->nw_proto == IPPROTO_ICMP) {
-            if (wc & OFPFW_TP_SRC) {
-                m->tp_src = 0;
-            }
-            if (wc & OFPFW_TP_DST) {
-                m->tp_dst = 0;
-            }
-        } else {
-            /* Transport layer fields will always be extracted as zeros, so we
-             * can do an exact-match on those values.  */
-            wc &= ~OFPFW_TP;
-            m->tp_src = m->tp_dst = 0;
-        }
-	m->nw_src &= ~m->nw_src_mask;
-	m->nw_dst &= ~m->nw_dst_mask;
-        if (wc & OFPFW_NW_TOS) {
-            m->nw_tos = 0;
-        } else {
-            m->nw_tos &= IP_DSCP_MASK;
-        }
-    } else if (m->dl_type == htons(ETH_TYPE_ARP)) {
-        if (wc & OFPFW_NW_PROTO) {
-            m->nw_proto = 0;
-        }
-	m->nw_src &= ~m->nw_src_mask;
-	m->nw_dst &= ~m->nw_dst_mask;
-        m->tp_src = m->tp_dst = m->nw_tos = 0;
-    } else {
-        /* Network and transport layer fields will always be extracted as
-         * zeros, so we can do an exact-match on those values. */
-        wc &= ~(OFPFW_NW | OFPFW_TP);
-	m->nw_src_mask = m->nw_dst_mask = 0xFFFFFFFF;
-        m->nw_proto = m->nw_src = m->nw_dst = m->nw_tos = 0;
-        m->tp_src = m->tp_dst = 0;
-    }
-    /* ofp1.1 : need to fix DL wildcards */
-    if (m->dl_src_mask[0] != 0) {
-        memset(m->dl_src, 0, sizeof m->dl_src);
-    }
-    if (m->dl_dst_mask[0] != 0) {
-        memset(m->dl_dst, 0, sizeof m->dl_dst);
-    }
-    m->wildcards = htonl(wc);
-}
-
-/* Returns a string that describes 'match' in a very literal way, without
- * interpreting its contents except in a very basic fashion.  The returned
- * string is intended to be fixed-length, so that it is easy to see differences
- * between two such strings if one is put above another.  This is useful for
- * describing changes made by normalize_match().
- *
- * The caller must free the returned string (with free()). */
-char *
-ofp_match_to_literal_string(const struct ofp_match *match)
-{
-    return xasprintf("wildcards=%#10"PRIx32" "
-                     " in_port=%5"PRId32" "
-                     " dl_src="ETH_ADDR_FMT" "
-                     " dl_src_mask="ETH_ADDR_FMT" "
-                     " dl_dst="ETH_ADDR_FMT" "
-                     " dl_dst_mask="ETH_ADDR_FMT" "
-                     " dl_vlan=%5"PRId16" "
-                     " dl_vlan_pcp=%3"PRId8" "
-                     " dl_type=%#6"PRIx16" "
-                     " nw_tos=%#4"PRIx8" "
-                     " nw_proto=%#4"PRIx16" "
-                     " nw_src=%#10"PRIx32" "
-                     " nw_src_mask=%#10"PRIx32" "
-                     " nw_dst=%#10"PRIx32" "
-                     " nw_dst_mask=%#10"PRIx32" "
-                     " tp_src=%5"PRId16" "
-                     " tp_dst=%5"PRId16,
-                     ntohl(match->wildcards),
-                     ntohl(match->in_port),
-                     ETH_ADDR_ARGS(match->dl_src),
-                     ETH_ADDR_ARGS(match->dl_src_mask),
-                     ETH_ADDR_ARGS(match->dl_dst),
-                     ETH_ADDR_ARGS(match->dl_dst_mask),
-                     ntohs(match->dl_vlan),
-                     match->dl_vlan_pcp,
-                     ntohs(match->dl_type),
-                     match->nw_tos,
-                     match->nw_proto,
-                     ntohl(match->nw_src),
-                     ntohl(match->nw_src_mask),
-                     ntohl(match->nw_dst),
-                     ntohl(match->nw_dst_mask),
-                     ntohs(match->tp_src),
-                     ntohs(match->tp_dst));
-}

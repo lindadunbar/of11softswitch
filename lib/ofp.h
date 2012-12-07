@@ -60,9 +60,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "flow.h"
 #include "ofpbuf.h"
-#include "openflow/openflow.h"
+#include "flow.h"
+#include "../include/openflow/openflow.h"
 
 /* OpenFlow protocol utility functions. */
 void *make_openflow(size_t openflow_len, uint8_t type, struct ofpbuf **);
@@ -82,9 +82,7 @@ struct ofpbuf *make_del_flow(const struct flow *, uint8_t table_id);
 struct ofpbuf *make_add_simple_flow(const struct flow *,
                                     uint32_t buffer_id, uint32_t out_port,
                                     uint16_t max_idle);
-struct ofpbuf *make_packet_in(uint32_t buffer_id, uint32_t in_port,
-                              uint8_t reason,
-                              const struct ofpbuf *payload, int max_send_len);
+
 struct ofpbuf *make_packet_out(const struct ofpbuf *packet, uint32_t buffer_id,
                                uint32_t in_port,
                                const struct ofp_action_header *,
@@ -123,8 +121,6 @@ int validate_actions(const union ofp_action *, size_t n_actions,
                      int max_ports, bool is_packet_out);
 bool action_outputs_to_port(const union ofp_action *, uint32_t port);
 
-void normalize_match(struct ofp_match *);
-char *ofp_match_to_literal_string(const struct ofp_match *match);
 
 static inline int
 ofp_mkerr(uint16_t type, uint16_t code)
@@ -138,11 +134,6 @@ union ofp_action {
     uint16_t type;
     struct ofp_action_header header;
     struct ofp_action_experimenter_header experimenter;
-    struct ofp_action_vlan_vid vlan_vid;
-    struct ofp_action_vlan_pcp vlan_pcp;
-    struct ofp_action_nw_addr nw_addr;
-    struct ofp_action_nw_tos nw_tos;
-    struct ofp_action_tp_port tp_port;
 };
 OFP_ASSERT(sizeof(union ofp_action) == 8);
 

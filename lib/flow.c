@@ -113,7 +113,7 @@ flow_extract(struct ofpbuf *packet, uint32_t in_port, struct flow *flow)
     int retval = 0;
 
     memset(flow, 0, sizeof *flow);
-    flow->dl_vlan = htons(OFP_VLAN_NONE);
+    flow->dl_vlan = htons(OFPVID_NONE);
     flow->in_port = htonl(in_port);
 
     packet->l2 = b.data;
@@ -123,7 +123,7 @@ flow_extract(struct ofpbuf *packet, uint32_t in_port, struct flow *flow)
 
     eth = pull_eth(&b);
     if (eth) {
-        if (ntohs(eth->eth_type) >= OFP_DL_TYPE_ETH2_CUTOFF) {
+        if (ntohs(eth->eth_type) >= 0x600) {
             /* This is an Ethernet II frame */
             flow->dl_type = eth->eth_type;
         } else {
@@ -143,7 +143,7 @@ flow_extract(struct ofpbuf *packet, uint32_t in_port, struct flow *flow)
                 flow->dl_type = snap->snap_type;
                 ofpbuf_pull(&b, LLC_SNAP_HEADER_LEN);
             } else {
-                flow->dl_type = htons(OFP_DL_TYPE_NOT_ETH_TYPE);
+                flow->dl_type = htons(0x05ff);
                 ofpbuf_pull(&b, sizeof(struct llc_header));
             }
         }
@@ -196,8 +196,8 @@ flow_extract(struct ofpbuf *packet, uint32_t in_port, struct flow *flow)
                     } else if (flow->nw_proto == IP_TYPE_ICMP) {
                         const struct icmp_header *icmp = pull_icmp(&b);
                         if (icmp) {
-                            flow->icmp_type = htons(icmp->icmp_type);
-                            flow->icmp_code = htons(icmp->icmp_code);
+                            flow->tp_src = htons(icmp->icmp_type);
+                            flow->tp_dst = htons(icmp->icmp_code);
                             packet->l7 = b.data;
                         } else {
                             /* Avoid tricking other code into thinking that
@@ -221,25 +221,6 @@ flow_extract(struct ofpbuf *packet, uint32_t in_port, struct flow *flow)
         }
     }
     return retval;
-}
-
-void
-flow_fill_match(struct ofp_match *to, const struct flow *from,
-                uint32_t wildcards)
-{
-    to->wildcards = htonl(wildcards);
-    to->in_port = from->in_port;
-    to->dl_vlan = from->dl_vlan;
-    memcpy(to->dl_src, from->dl_src, ETH_ADDR_LEN);
-    memcpy(to->dl_dst, from->dl_dst, ETH_ADDR_LEN);
-    to->dl_type = from->dl_type;
-    to->nw_tos = from->nw_tos;
-    to->nw_proto = from->nw_proto;
-    to->nw_src = from->nw_src;
-    to->nw_dst = from->nw_dst;
-    to->tp_src = from->tp_src;
-    to->tp_dst = from->tp_dst;
-    to->dl_vlan_pcp = from->dl_vlan_pcp;
 }
 
 void

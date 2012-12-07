@@ -140,6 +140,11 @@ hmap_shrink(struct hmap *hmap)
     }
 }
 
+void hmap_remove_and_shrink(struct hmap *hmap, struct hmap_node *node){
+    hmap_remove(hmap, node);
+    //hmap_shrink(hmap);
+}
+
 /* Expands 'hmap', if necessary, to optimize the performance of searches when
  * it has up to 'n' elements.  (But iteration will be slow in a hash map whose
  * allocated capacity is much higher than its current number of nodes.)  */

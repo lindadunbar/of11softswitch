@@ -64,8 +64,7 @@ struct flow {
 BUILD_ASSERT_DECL(sizeof(struct flow) == 40);
 
 int flow_extract(struct ofpbuf *, uint32_t in_port, struct flow *);
-void flow_fill_match(struct ofp_match *, const struct flow *,
-                     uint32_t wildcards);
+
 void flow_print(FILE *, const struct flow *);
 static inline int flow_compare(const struct flow *, const struct flow *);
 static inline bool flow_equal(const struct flow *, const struct flow *);

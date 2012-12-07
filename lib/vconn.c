@@ -41,7 +41,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "dynamic-string.h"
-#include "flow.h"
 #include "ofp.h"
 #include "ofpbuf.h"
 #include "openflow/openflow.h"

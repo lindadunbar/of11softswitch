@@ -46,7 +46,6 @@
 #include "csum.h"
 #include "dhcp.h"
 #include "dynamic-string.h"
-#include "flow.h"
 #include "netdev.h"
 #include "ofpbuf.h"
 #include "poll-loop.h"
@@ -928,7 +927,7 @@ do_receive_msg(struct dhclient *cli, struct dhcp_msg *msg)
     for (; cli->received < 50; cli->received++) {
         const struct ip_header *ip;
         const struct dhcp_header *dhcp;
-        struct flow flow;
+        // struct flow flow;
         int error;
 
         ofpbuf_clear(&b);
@@ -937,7 +936,7 @@ do_receive_msg(struct dhclient *cli, struct dhcp_msg *msg)
             goto drained;
         }
 
-        flow_extract(&b, 0, &flow);
+       /*flow_extract(&b, 0, &flow);
         if (flow.dl_type != htons(ETH_TYPE_IP)
             || flow.nw_proto != IP_TYPE_UDP
             || flow.tp_dst != htons(68)
@@ -945,7 +944,7 @@ do_receive_msg(struct dhclient *cli, struct dhcp_msg *msg)
                  || eth_addr_equals(flow.dl_dst,
                                     netdev_get_etheraddr(cli->netdev)))) {
             continue;
-        }
+        }*/
 
         ip = b.l3;
         if (IP_IS_FRAGMENT(ip->ip_frag_off)) {

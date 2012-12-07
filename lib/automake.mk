@@ -29,6 +29,8 @@ lib_libopenflow_a_SOURCES = \
 	lib/hash.h \
 	lib/hmap.c \
 	lib/hmap.h \
+	lib/ipv6_util.c \
+	lib/ipv6_util.h \
 	lib/leak-checker.c \
 	lib/leak-checker.h \
 	lib/list.c \
@@ -38,6 +40,7 @@ lib_libopenflow_a_SOURCES = \
 	lib/netdev.c \
 	lib/netdev.h \
 	lib/ofp.c \
+	lib/ofp.h \
 	lib/ofp.h \
 	lib/ofpbuf.c \
 	lib/ofpbuf.h \
@@ -98,9 +101,11 @@ lib_libopenflow_a_LIBADD = oflib/ofl-actions.o \
                            oflib/ofl-messages-print.o \
                            oflib/ofl-messages-unpack.o \
                            oflib/ofl-structs.o \
+			               oflib/ofl-structs-match.o \
                            oflib/ofl-structs-pack.o \
                            oflib/ofl-structs-print.o \
                            oflib/ofl-structs-unpack.o \
+                           oflib/oxm-match.o \
                            oflib/ofl-print.o \
                            oflib-exp/ofl-exp.o \
                            oflib-exp/ofl-exp-nicira.o \

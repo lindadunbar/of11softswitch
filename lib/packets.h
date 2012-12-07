@@ -36,6 +36,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <inttypes.h>
+#include <netinet/in.h>
 #include "compiler.h"
 #include "random.h"
 #include "util.h"
@@ -110,6 +111,7 @@ static inline bool eth_addr_is_reserved(const uint8_t ea[ETH_ADDR_LEN])
 
 #define ETH_TYPE_II_START      0x0600
 #define ETH_TYPE_IP            0x0800
+#define ETH_TYPE_IPV6          0x86dd
 #define ETH_TYPE_ARP           0x0806
 #define ETH_TYPE_VLAN          0x8100
 #define ETH_TYPE_VLAN_PBB      0x88a8
@@ -233,6 +235,19 @@ struct ip_header {
 };
 BUILD_ASSERT_DECL(IP_HEADER_LEN == sizeof(struct ip_header));
 
+#define IPV6_HEADER_LEN 44
+struct ipv6_header {
+    uint8_t ipv6_ver;
+    uint8_t ipv6_tc;
+    uint32_t ipv6_fl;
+    uint16_t ipv6_pay_len;
+    uint8_t  ipv6_next_hd;
+    uint8_t ipv6_hop_limit;
+    struct in6_addr ipv6_src;
+    struct in6_addr ipv6_dst;
+};
+BUILD_ASSERT_DECL(IPV6_HEADER_LEN == sizeof(struct ipv6_header));
+
 #define ICMP_HEADER_LEN 4
 struct icmp_header {
     uint8_t icmp_type;
@@ -327,6 +342,38 @@ struct mpls_header {
 #define MPLS_LABEL_SHIFT 12
 
 BUILD_ASSERT_DECL(MPLS_HEADER_LEN == sizeof(struct mpls_header));
+
+struct protocols_std {
+   struct eth_header      * eth;
+   struct snap_header     * eth_snap; /* points to SNAP header if eth is 802.3 */
+   struct vlan_header     * vlan;
+   struct vlan_header     * vlan_last; /* points to the last VLAN header */
+   struct mpls_header     * mpls;
+   struct ip_header       * ipv4;
+   struct ipv6_header     * ipv6;
+   struct arp_eth_header  * arp;
+   struct tcp_header      * tcp;
+   struct udp_header      * udp;
+   struct sctp_header     * sctp;
+   struct icmp_header     * icmp;
+};
+
+static inline void 
+protocol_reset(struct protocols_std *proto) {
+    proto->eth       = NULL;
+    proto->eth_snap  = NULL;
+    proto->vlan      = NULL;
+    proto->vlan_last = NULL;
+    proto->mpls      = NULL;
+    proto->ipv4      = NULL;
+    proto->ipv6      = NULL;
+    proto->arp       = NULL;
+    proto->tcp       = NULL;
+    proto->udp       = NULL;
+    proto->sctp      = NULL;
+    proto->icmp      = NULL;    
+    
+}
 
 
 

@@ -61,6 +61,10 @@ struct hmap {
 /* Initializer for an empty hash map. */
 #define HMAP_INITIALIZER(HMAP) { &(HMAP)->one, NULL, 0, 0 }
 
+#define HMAP_NODE_NULL ((struct hmap_node *) 1)
+#define HMAP_NODE_NULL_INITIALIZER { 0, HMAP_NODE_NULL }
+
+
 /* Initialization. */
 void hmap_init(struct hmap *);
 void hmap_destroy(struct hmap *);
@@ -78,6 +82,7 @@ static inline void hmap_insert_fast(struct hmap *,
                                     struct hmap_node *, size_t hash);
 static inline void hmap_insert(struct hmap *, struct hmap_node *, size_t hash);
 static inline void hmap_remove(struct hmap *, struct hmap_node *);
+void hmap_remove_and_shrink(struct hmap *hmap, struct hmap_node *node);
 
 /* Search. */
 #define HMAP_FOR_EACH_WITH_HASH(NODE, STRUCT, MEMBER, HASH, HMAP)       \
