@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,8 +26,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #include <netinet/in.h>
@@ -42,6 +41,8 @@
 #include "packets.h"
 #include "pipeline.h"
 #include "util.h"
+#include "oflib/oxm-match.h"
+#include "hash.h"
 
 #define LOG_MODULE VLM_dp_acts
 
@@ -64,175 +65,89 @@ output(struct packet *pkt, struct ofl_action_output *action) {
     }
 }
 
-/* Executes a set vlan vid action. */
+/* Executes a set field action.
+TODO: if we use the the index structure to the packet fields 
+revalidation is not needed  */
+
 static void
-set_vlan_vid(struct packet *pkt, struct ofl_action_vlan_vid *act) {
+set_field(struct packet *pkt, struct ofl_action_set_field *act ) 
+{
     packet_handle_std_validate(pkt->handle_std);
-    if (pkt->handle_std->proto->vlan != NULL) {
-        struct vlan_header *vlan = pkt->handle_std->proto->vlan;
+    if (pkt->handle_std->valid)
+    {
+        struct packet_fields *iter;
+        /* Search field on the description of the packet. */
+        HMAP_FOR_EACH_WITH_HASH(iter,struct packet_fields, hmap_node, hash_int(act->field->header,0), &pkt->handle_std->match.match_fields)
+        {
+            /* TODO: Checksum for SCTP and ICMP */
+            if (iter->header == OXM_OF_IPV4_SRC || iter->header == OXM_OF_IPV4_DST)
+            {
+                memcpy(((uint8_t*)pkt->buffer->data + iter->pos) , act->field->value , OXM_LENGTH(iter->header));
+                
+                // update TCP/UDP checksum
+                struct ip_header *ipv4 = pkt->handle_std->proto->ipv4;
+                if (pkt->handle_std->proto->tcp != NULL) {
+                    struct tcp_header *tcp = pkt->handle_std->proto->tcp;
+                    tcp->tcp_csum = recalc_csum32(tcp->tcp_csum, ipv4->ip_src,htonl(*((uint32_t*) act->field->value)));
+                } else if (pkt->handle_std->proto->udp != NULL) {
+                    struct udp_header *udp = pkt->handle_std->proto->udp;
+                    udp->udp_csum = recalc_csum32(udp->udp_csum, ipv4->ip_src, htonl(*((uint32_t*) act->field->value)));
 
-        vlan->vlan_tci = htons((ntohs(vlan->vlan_tci) & ~VLAN_VID_MASK) |
-                               (act->vlan_vid & VLAN_VID_MASK));
-
-        pkt->handle_std->match->dl_vlan = act->vlan_vid;
-    } else {
-        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_VLAN_VID action on packet with no vlan.");
-    }
-}
-
-/* Executes set vlan pcp action. */
-static void
-set_vlan_pcp(struct packet *pkt, struct ofl_action_vlan_pcp *act) {
-    packet_handle_std_validate(pkt->handle_std);
-    if (pkt->handle_std->proto->vlan != NULL) {
-        struct vlan_header *vlan = pkt->handle_std->proto->vlan;
-
-        vlan->vlan_tci = (vlan->vlan_tci & ~htons(VLAN_PCP_MASK)) | htons(act->vlan_pcp << VLAN_PCP_SHIFT);
-
-        pkt->handle_std->match->dl_vlan_pcp = act->vlan_pcp;
-    } else {
-        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_VLAN_PCP action on packet with no vlan.");
-    }
-}
-
-/* Executes set dl src action. */
-static void
-set_dl_src(struct packet *pkt, struct ofl_action_dl_addr *act) {
-    packet_handle_std_validate(pkt->handle_std);
-    if (pkt->handle_std->proto->eth != NULL) {
-        struct eth_header *eth = pkt->handle_std->proto->eth;
-
-        memcpy(eth->eth_src, act->dl_addr, ETH_ADDR_LEN);
-
-        memcpy(&pkt->handle_std->match->dl_src, act->dl_addr, ETH_ADDR_LEN);
-    } else {
-        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_DL_SRC action on packet with no dl.");
-    }
-}
-
-/* Executes set dl dst action. */
-static void
-set_dl_dst(struct packet *pkt, struct ofl_action_dl_addr *act) {
-    packet_handle_std_validate(pkt->handle_std);
-    if (pkt->handle_std->proto->eth != NULL) {
-        struct eth_header *eth = pkt->handle_std->proto->eth;
-
-        memcpy(eth->eth_dst, act->dl_addr, ETH_ADDR_LEN);
-
-        memcpy(&pkt->handle_std->match->dl_dst, act->dl_addr, ETH_ADDR_LEN);
-    } else {
-        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_DL_DST action on packet with no dl.");
-    }
-}
-
-/* Executes set nw src action. */
-static void
-set_nw_src(struct packet *pkt, struct ofl_action_nw_addr *act) {
-    packet_handle_std_validate(pkt->handle_std);
-    if (pkt->handle_std->proto->ipv4 != NULL) {
-        struct ip_header *ipv4 = pkt->handle_std->proto->ipv4;
-
-        // update TCP/UDP checksum
-        if (pkt->handle_std->proto->tcp != NULL) {
-            struct tcp_header *tcp = pkt->handle_std->proto->tcp;
-
-            tcp->tcp_csum = recalc_csum32(tcp->tcp_csum, ipv4->ip_src, act->nw_addr);
-        } else if (pkt->handle_std->proto->udp != NULL) {
-            struct udp_header *udp = pkt->handle_std->proto->udp;
-
-            udp->udp_csum = recalc_csum32(udp->udp_csum, ipv4->ip_src, act->nw_addr);
+                }
+                if (iter->header == OXM_OF_IPV4_SRC)
+                {
+                    ipv4->ip_csum = recalc_csum32(ipv4->ip_csum, ipv4->ip_src, htonl(*((uint32_t*) act->field->value)));
+                }
+                else 
+                { 
+                    ipv4->ip_csum = recalc_csum32(ipv4->ip_csum, ipv4->ip_dst, htonl(*((uint32_t*) act->field->value)));
+                }  
+                pkt->handle_std->valid = false;
+                return;        	       
+            }
+            if (iter->header == OXM_OF_TCP_SRC)
+            {
+                struct tcp_header *tcp = pkt->handle_std->proto->tcp;
+                tcp->tcp_csum = recalc_csum16(tcp->tcp_csum, tcp->tcp_src, htons(*((uint16_t*) act->field->value)));
+            }
+            else if (iter->header == OXM_OF_TCP_DST)
+            {
+                struct tcp_header *tcp = pkt->handle_std->proto->tcp;
+                tcp->tcp_csum = recalc_csum16(tcp->tcp_csum, tcp->tcp_dst, htons(*((uint16_t*) act->field->value)));
+            }
+            else if (iter->header == OXM_OF_UDP_SRC)
+            {
+                struct udp_header *udp = pkt->handle_std->proto->udp;
+                udp->udp_csum = recalc_csum16(udp->udp_csum, udp->udp_src, htons(*((uint16_t*) act->field->value)));
+            }
+            else if (iter->header == OXM_OF_UDP_DST)
+            {
+                struct udp_header *udp = pkt->handle_std->proto->udp;
+                udp->udp_csum = recalc_csum16(udp->udp_csum, udp->udp_dst, htons(*((uint16_t*) act->field->value)));
+            }
+            if (iter->header == OXM_OF_IPV6_SRC || iter->header == OXM_OF_IPV6_DST || 
+                iter->header == OXM_OF_ETH_SRC || iter->header == OXM_OF_ETH_DST)
+            {
+                memcpy(((uint8_t*)pkt->buffer->data + iter->pos) , act->field->value , OXM_LENGTH(iter->header));
+                pkt->handle_std->valid = false;
+                return;
+            }
+            /* Found the field, lets re-write it!! */
+    	    uint8_t* tmp = (uint8_t*) malloc(OXM_LENGTH(iter->header));
+    	    uint8_t i;
+    	    for (i=0;i<OXM_LENGTH(iter->header);i++)
+    	    {
+        	    memcpy(((uint8_t*)tmp + i) , (act->field->value + OXM_LENGTH(iter->header) - i -1 ), 1); 
+    	    }
+    	    memcpy(((uint8_t*)pkt->buffer->data + iter->pos) , tmp , OXM_LENGTH(iter->header));
+            pkt->handle_std->valid = false;
+    	    return;
         }
-
-        ipv4->ip_csum = recalc_csum32(ipv4->ip_csum, ipv4->ip_src, act->nw_addr);
-        ipv4->ip_src = act->nw_addr;
-
-        pkt->handle_std->match->nw_src = act->nw_addr;
-
-    } else {
-        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_NW_SRC action on packet with no nw.");
+        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_FIELD action on packet with no corresponding field.");
     }
+
 }
-
-/* Executes set nw dst action. */
-static void
-set_nw_dst(struct packet *pkt, struct ofl_action_nw_addr *act) {
-    packet_handle_std_validate(pkt->handle_std);
-    if (pkt->handle_std->proto->ipv4 != NULL) {
-        struct ip_header *ipv4 = pkt->handle_std->proto->ipv4;
-
-        // update TCP/UDP checksum
-        if (pkt->handle_std->proto->tcp != NULL) {
-            struct tcp_header *tcp = pkt->handle_std->proto->tcp;
-
-            tcp->tcp_csum = recalc_csum32(tcp->tcp_csum, ipv4->ip_dst, act->nw_addr);
-        } else if (pkt->handle_std->proto->udp != NULL) {
-            struct udp_header *udp = pkt->handle_std->proto->udp;
-
-            udp->udp_csum = recalc_csum32(udp->udp_csum, ipv4->ip_dst, act->nw_addr);
-        }
-
-        ipv4->ip_csum = recalc_csum32(ipv4->ip_csum, ipv4->ip_dst, act->nw_addr);
-        ipv4->ip_dst = act->nw_addr;
-
-        pkt->handle_std->match->nw_dst = act->nw_addr;
-    } else {
-        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_NW_DST action on packet with no nw.");
-    }
-}
-
-/* Executes set tp src action. */
-static void
-set_tp_src(struct packet *pkt, struct ofl_action_tp_port *act) {
-    packet_handle_std_validate(pkt->handle_std);
-    if (pkt->handle_std->proto->tcp != NULL) {
-        struct tcp_header *tcp = pkt->handle_std->proto->tcp;
-
-        tcp->tcp_csum = recalc_csum16(tcp->tcp_csum, tcp->tcp_src, htons(act->tp_port));
-        tcp->tcp_src = htons(act->tp_port);
-
-        pkt->handle_std->match->tp_src = act->tp_port;
-
-    } else if (pkt->handle_std->proto->udp != NULL) {
-        struct udp_header *udp = pkt->handle_std->proto->udp;
-
-        udp->udp_csum = recalc_csum16(udp->udp_csum, udp->udp_src, htons(act->tp_port));
-        udp->udp_src = htons(act->tp_port);
-
-        pkt->handle_std->match->tp_src = act->tp_port;
-
-    } else {
-        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_TP_SRC action on packet with no tp.");
-    }
-}
-
-
-/* Executes set tp dst action. */
-static void
-set_tp_dst(struct packet *pkt, struct ofl_action_tp_port *act) {
-    packet_handle_std_validate(pkt->handle_std);
-    if (pkt->handle_std->proto->tcp != NULL) {
-        struct tcp_header *tcp = pkt->handle_std->proto->tcp;
-
-        tcp->tcp_csum = recalc_csum16(tcp->tcp_csum, tcp->tcp_dst, htons(act->tp_port));
-        tcp->tcp_dst = htons(act->tp_port);
-
-        pkt->handle_std->match->tp_dst = act->tp_port;
-
-    } else if (pkt->handle_std->proto->udp != NULL) {
-        struct udp_header *udp = pkt->handle_std->proto->udp;
-
-        udp->udp_csum = recalc_csum16(udp->udp_csum, udp->udp_dst, htons(act->tp_port));
-        udp->udp_dst = htons(act->tp_port);
-
-        // update packet match (assuming it is of type ofl_match_standard)
-        pkt->handle_std->match->tp_dst = act->tp_port;
-
-    } else {
-        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_TP_DST action on packet with no tp.");
-    }
-}
-
-/* Executes copy ttl out action. */
+/* Executes copy ttl out action.*/
 static void
 copy_ttl_out(struct packet *pkt, struct ofl_action_header *act UNUSED) {
     packet_handle_std_validate(pkt->handle_std);
@@ -257,7 +172,7 @@ copy_ttl_out(struct packet *pkt, struct ofl_action_header *act UNUSED) {
     } else {
         VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute COPY_TTL_OUT action on packet with no mpls.");
     }
-}
+} 
 
 /* Executes copy ttl in action. */
 static void
@@ -290,77 +205,7 @@ copy_ttl_in(struct packet *pkt, struct ofl_action_header *act UNUSED) {
     }
 }
 
-/* Executes set mpls label action. */
-static void
-set_mpls_label(struct packet *pkt, struct ofl_action_mpls_label *act) {
-    packet_handle_std_validate(pkt->handle_std);
-    if (pkt->handle_std->proto->mpls != NULL) {
-        struct mpls_header *mpls = pkt->handle_std->proto->mpls;
-
-        mpls->fields = (mpls->fields & ~ntohl(MPLS_LABEL_MASK)) | ntohl((act->mpls_label << MPLS_LABEL_SHIFT) & MPLS_LABEL_MASK);
-
-        pkt->handle_std->match->mpls_label = act->mpls_label;
-
-    } else {
-        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_MPLS_LABEL action on packet with no mpls.");
-    }
-}
-
-/* Executes set mpls tc action. */
-static void
-set_mpls_tc(struct packet *pkt, struct ofl_action_mpls_tc *act) {
-    packet_handle_std_validate(pkt->handle_std);
-    if (pkt->handle_std->proto->mpls != NULL) {
-        struct mpls_header *mpls = pkt->handle_std->proto->mpls;
-
-        mpls->fields = (mpls->fields & ~ntohl(MPLS_TC_MASK)) | ntohl((act->mpls_tc << MPLS_TC_SHIFT) & MPLS_TC_MASK);
-
-        pkt->handle_std->match->mpls_tc = act->mpls_tc;
-
-    } else {
-        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_MPLS_TC action on packet with no mpls.");
-    }
-}
-
-/* Executes set nw tos action. */
-static void
-set_nw_tos(struct packet *pkt, struct ofl_action_nw_tos *act) {
-    packet_handle_std_validate(pkt->handle_std);
-    if (pkt->handle_std->proto->ipv4 != NULL) {
-        struct ip_header *ipv4 = pkt->handle_std->proto->ipv4;
-        uint8_t new_value;
-
-        new_value = (ipv4->ip_tos & IP_ECN_MASK) | (act->nw_tos & IP_DSCP_MASK);
-        /* jklee : ip tos field is not included in TCP pseudo header.
-         * Need magic as update_csum() don't work with 8 bits. */
-        ipv4->ip_csum = recalc_csum16(ipv4->ip_csum, (uint16_t)(ipv4->ip_tos), (uint16_t)new_value);
-        ipv4->ip_tos = new_value;
-
-        pkt->handle_std->match->nw_tos = act->nw_tos;
-    } else {
-        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_NW_TOS action on packet with no tp.");
-    }
-}
-
-/* Executes set nw ecn action. */
-static void
-set_nw_ecn(struct packet *pkt, struct ofl_action_nw_ecn *act) {
-    packet_handle_std_validate(pkt->handle_std);
-    if (pkt->handle_std->proto->ipv4 != NULL) {
-        struct ip_header *ipv4 = pkt->handle_std->proto->ipv4;
-        uint8_t new_value;
-
-        new_value = (ipv4->ip_tos & IP_DSCP_MASK) | (act->nw_ecn & IP_ECN_MASK);
-        /* jklee : ip tos field is not included in TCP pseudo header.
-         * Need magic as update_csum() don't work with 8 bits. */
-        ipv4->ip_csum = recalc_csum16(ipv4->ip_csum, (uint16_t)(ipv4->ip_tos), (uint16_t)new_value);
-        ipv4->ip_tos = new_value;
-    } else {
-        VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute SET_NW_ECN action on packet with no tp.");
-    }
-}
-
-/* Executes push vlan action. */
+/*Executes push vlan action. */
 static void
 push_vlan(struct packet *pkt, struct ofl_action_push *act) {
     // TODO Zoltan: if 802.3, check if new length is still valid
@@ -433,7 +278,7 @@ push_vlan(struct packet *pkt, struct ofl_action_push *act) {
     }
 }
 
-/* Executes pop vlan action. */
+/*Executes pop vlan action. */
 static void
 pop_vlan(struct packet *pkt, struct ofl_action_header *act UNUSED) {
     packet_handle_std_validate(pkt->handle_std);
@@ -465,7 +310,7 @@ pop_vlan(struct packet *pkt, struct ofl_action_header *act UNUSED) {
 }
 
 
-/* Executes set mpls ttl action. */
+/*Executes set mpls ttl action.*/
 static void
 set_mpls_ttl(struct packet *pkt, struct ofl_action_mpls_ttl *act) {
     packet_handle_std_validate(pkt->handle_std);
@@ -479,7 +324,7 @@ set_mpls_ttl(struct packet *pkt, struct ofl_action_mpls_ttl *act) {
     }
 }
 
-/* Executes dec mpls label action. */
+/*Executes dec mpls ttl action.*/ 
 static void
 dec_mpls_ttl(struct packet *pkt, struct ofl_action_header *act UNUSED) {
     packet_handle_std_validate(pkt->handle_std);
@@ -496,7 +341,7 @@ dec_mpls_ttl(struct packet *pkt, struct ofl_action_header *act UNUSED) {
     }
 }
 
-/* Executes push mpls action. */
+/*Executes push mpls action. */
 static void
 push_mpls(struct packet *pkt, struct ofl_action_push *act) {
     // TODO Zoltan: if 802.3, check if new length is still valid
@@ -639,7 +484,8 @@ group(struct packet *pkt, struct ofl_action_group *act) {
     pkt->out_group = act->group_id;
 }
 
-/* Executes set nw ttl action. */
+/* Executes set nw ttl action. 
+TODO Set IPv6 hop limit*/ 
 static void
 set_nw_ttl(struct packet *pkt, struct ofl_action_set_nw_ttl *act) {
     packet_handle_std_validate(pkt->handle_std);
@@ -655,7 +501,8 @@ set_nw_ttl(struct packet *pkt, struct ofl_action_set_nw_ttl *act) {
     }
 }
 
-/* Executes dec nw ttl action. */
+/* Executes dec nw ttl action.
+TODO Dec IPv6 hop limit*/ 
 static void
 dec_nw_ttl(struct packet *pkt, struct ofl_action_header *act UNUSED) {
     packet_handle_std_validate(pkt->handle_std);
@@ -687,48 +534,12 @@ dp_execute_action(struct packet *pkt,
     }
 
     switch (action->type) {
-        case (OFPAT_OUTPUT): {
+        case (OFPAT_SET_FIELD): {
+            set_field(pkt,(struct ofl_action_set_field*) action);
+            break;
+        }
+         case (OFPAT_OUTPUT): {
             output(pkt, (struct ofl_action_output *)action);
-            break;
-        }
-        case (OFPAT_SET_VLAN_VID): {
-            set_vlan_vid(pkt, (struct ofl_action_vlan_vid *)action);
-            break;
-        }
-        case (OFPAT_SET_VLAN_PCP): {
-            set_vlan_pcp(pkt, (struct ofl_action_vlan_pcp *)action);
-            break;
-        }
-        case (OFPAT_SET_DL_SRC): {
-            set_dl_src(pkt, (struct ofl_action_dl_addr *)action);
-            break;
-        }
-        case (OFPAT_SET_DL_DST): {
-            set_dl_dst(pkt, (struct ofl_action_dl_addr *)action);
-            break;
-        }
-        case (OFPAT_SET_NW_SRC): {
-            set_nw_src(pkt, (struct ofl_action_nw_addr *)action);
-            break;
-        }
-        case (OFPAT_SET_NW_DST): {
-            set_nw_dst(pkt, (struct ofl_action_nw_addr *)action);
-            break;
-        }
-        case (OFPAT_SET_NW_TOS): {
-            set_nw_tos(pkt, (struct ofl_action_nw_tos *)action);
-            break;
-        }
-        case (OFPAT_SET_NW_ECN): {
-            set_nw_ecn(pkt, (struct ofl_action_nw_ecn *)action);
-            break;
-        }
-        case (OFPAT_SET_TP_SRC): {
-            set_tp_src(pkt, (struct ofl_action_tp_port *)action);
-            break;
-        }
-        case (OFPAT_SET_TP_DST): {
-            set_tp_dst(pkt, (struct ofl_action_tp_port *)action);
             break;
         }
         case (OFPAT_COPY_TTL_OUT): {
@@ -737,14 +548,6 @@ dp_execute_action(struct packet *pkt,
         }
         case (OFPAT_COPY_TTL_IN): {
             copy_ttl_in(pkt, action);
-            break;
-        }
-        case (OFPAT_SET_MPLS_LABEL): {
-            set_mpls_label(pkt, (struct ofl_action_mpls_label *)action);
-            break;
-        }
-        case (OFPAT_SET_MPLS_TC): {
-            set_mpls_tc(pkt, (struct ofl_action_mpls_tc *)action);
             break;
         }
         case (OFPAT_SET_MPLS_TTL): {
@@ -791,6 +594,7 @@ dp_execute_action(struct packet *pkt,
         	dp_exp_action(pkt, (struct ofl_action_experimenter *)action);
             break;
         }
+     
         default: {
             VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to execute unknown action type (%u).", action->type);
         }
@@ -855,22 +659,34 @@ dp_actions_output_port(struct packet *pkt, uint32_t out_port, uint32_t out_queue
             break;
         }
         case (OFPP_CONTROLLER): {
-            dp_buffers_save(pkt->dp->buffers, pkt);
-
-            {
-                struct ofl_msg_packet_in msg =
-                        {{.type = OFPT_PACKET_IN},
-                         .buffer_id   = pkt->buffer_id,
-                         .in_port     = pkt->in_port,
-                         .in_phy_port = pkt->in_port, // TODO: how to get phy port for v.port?
-                         .total_len   = pkt->buffer->size,
-                         .reason      = OFPR_ACTION,
-                         .table_id    = pkt->table_id,
-                         .data_length = MIN(max_len, pkt->buffer->size),
-                         .data        = pkt->buffer->data};
-
-                dp_send_message(pkt->dp, (struct ofl_msg_header *)&msg, NULL);
+            struct ofl_msg_packet_in msg;
+            struct ofl_match *m; 
+            msg.header.type = OFPT_PACKET_IN;
+            msg.total_len   = pkt->buffer->size;
+            msg.reason = OFPR_ACTION;
+            msg.table_id = pkt->table_id;
+            msg.data        = pkt->buffer->data;
+            
+            
+            if (pkt->dp->config.miss_send_len != OFPCML_NO_BUFFER){
+                dp_buffers_save(pkt->dp->buffers, pkt);
+                msg.buffer_id = pkt->buffer_id;
+                msg.data_length = MIN(max_len, pkt->buffer->size);
             }
+            else {
+                msg.buffer_id = OFP_NO_BUFFER;
+                msg.data_length =  pkt->buffer->size;                               
+            }    
+            
+            m = xmalloc (sizeof(struct ofl_match));
+            ofl_structs_match_init(m);
+            /* In this implementation the fields in_port and in_phy_port 
+                always will be the same, because we are not considering logical
+                ports*/
+            ofl_structs_match_convert_pktf2oflm(&pkt->handle_std->match.match_fields, m);
+            msg.match = (struct ofl_match_header*)m;
+            dp_send_message(pkt->dp, (struct ofl_msg_header *)&msg, NULL);
+            ofl_structs_free_match((struct ofl_match_header* ) m, NULL); 
             break;
         }
         case (OFPP_FLOOD):

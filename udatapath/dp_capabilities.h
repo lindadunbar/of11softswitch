@@ -48,8 +48,7 @@
                                | OFPC_PORT_STATS           \
                                | OFPC_GROUP_STATS          \
                             /* | OFPC_IP_REASM       */    \
-                               | OFPC_QUEUE_STATS          \
-                               | OFPC_ARP_MATCH_IP )
+                               | OFPC_QUEUE_STATS          )
 
 #define DP_SUPPORTED_INSTRUCTIONS ( (1 << OFPIT_GOTO_TABLE)         \
                                   | (1 << OFPIT_WRITE_METADATA)     \
@@ -58,20 +57,8 @@
                                   | (1 << OFPIT_CLEAR_ACTIONS) )
 
 #define DP_SUPPORTED_ACTIONS ( (1 << OFPAT_OUTPUT)          \
-                             | (1 << OFPAT_SET_VLAN_VID)    \
-                             | (1 << OFPAT_SET_VLAN_PCP)    \
-                             | (1 << OFPAT_SET_DL_SRC)      \
-                             | (1 << OFPAT_SET_DL_DST)      \
-                             | (1 << OFPAT_SET_NW_SRC)      \
-                             | (1 << OFPAT_SET_NW_DST)      \
-                             | (1 << OFPAT_SET_NW_TOS)      \
-                             | (1 << OFPAT_SET_NW_ECN)      \
-                             | (1 << OFPAT_SET_TP_SRC)      \
-                             | (1 << OFPAT_SET_TP_DST)      \
                              | (1 << OFPAT_COPY_TTL_OUT)    \
                              | (1 << OFPAT_COPY_TTL_IN)     \
-                             | (1 << OFPAT_SET_MPLS_LABEL)  \
-                             | (1 << OFPAT_SET_MPLS_TC)     \
                              | (1 << OFPAT_SET_MPLS_TTL)    \
                              | (1 << OFPAT_DEC_MPLS_TTL)    \
                              | (1 << OFPAT_PUSH_VLAN)       \
@@ -83,25 +70,43 @@
                              | (1 << OFPAT_SET_NW_TTL)      \
                              | (1 << OFPAT_DEC_NW_TTL) )
 
-#define DP_SUPPORTED_WILDCARDS    OFPFW_ALL
 
-#define DP_SUPPORTED_MATCH_FIELDS ( OFPFMF_IN_PORT        \
-                                  | OFPFMF_DL_VLAN        \
-                                  | OFPFMF_DL_VLAN_PCP    \
-                                  | OFPFMF_DL_TYPE        \
-                                  | OFPFMF_NW_TOS         \
-                                  | OFPFMF_NW_PROTO       \
-                                  | OFPFMF_TP_SRC         \
-                                  | OFPFMF_TP_DST         \
-                                  | OFPFMF_MPLS_LABEL     \
-                                  | OFPFMF_MPLS_TC        \
-                                  | OFPFMF_TYPE           \
-                                  | OFPFMF_DL_SRC         \
-                                  | OFPFMF_DL_DST         \
-                                  | OFPFMF_NW_SRC         \
-                                  | OFPFMF_NW_SRC         \
-                                  | OFPFMF_NW_DST         \
-                                  | OFPFMF_METADATA )
+#define DP_SUPPORTED_MATCH_FIELDS ( OFPXMT_OFB_IN_PORT        \
+                                  | OFPXMT_OFB_IN_PHY_PORT    \
+                                  | OFPXMT_OFB_METADATA       \
+                                  | OFPXMT_OFB_ETH_DST        \
+                                  | OFPXMT_OFB_ETH_SRC        \
+                                  | OFPXMT_OFB_ETH_TYPE       \
+                                  | OFPXMT_OFB_VLAN_VID       \
+                                  | OFPXMT_OFB_VLAN_PCP       \
+                                  | OFPXMT_OFB_IP_DSCP        \
+                                  | OFPXMT_OFB_IP_ECN         \
+                                  | OFPXMT_OFB_IP_PROTO       \
+                                  | OFPXMT_OFB_IPV4_SRC       \
+                                  | OFPXMT_OFB_IPV4_DST       \
+                                  | OFPXMT_OFB_TCP_SRC        \
+                                  | OFPXMT_OFB_TCP_DST        \
+                                  | OFPXMT_OFB_UDP_SRC        \
+                                  | OFPXMT_OFB_UDP_DST        \
+                                  | OFPXMT_OFB_SCTP_SRC       \
+                                  | OFPXMT_OFB_SCTP_DST       \
+                                  | OFPXMT_OFB_ICMPV4_CODE    \
+                                  | OFPXMT_OFB_ICMPV4_TYPE    \
+                                  | OFPXMT_OFB_ARP_OP         \
+                                  | OFPXMT_OFB_ARP_SHA        \
+                                  | OFPXMT_OFB_ARP_SPA        \
+                                  | OFPXMT_OFB_ARP_THA        \
+                                  | OFPXMT_OFB_ARP_TPA        \
+                                  | OFPXMT_OFB_IPV6_SRC       \
+                                  | OFPXMT_OFB_IPV6_DST       \
+                                  | OFPXMT_OFB_IPV6_FLABEL    \
+                                  | OFPXMT_OFB_ICMPV6_CODE    \
+                                  | OFPXMT_OFB_ICMPV6_TYPE    \
+                                  | OFPXMT_OFB_IPV6_ND_SLL    \
+                                  | OFPXMT_OFB_IPV6_ND_TARGET \
+                                  | OFPXMT_OFB_IPV6_ND_TLL    \
+                                  | OFPXMT_OFB_MPLS_LABEL     \
+                                  | OFPXMT_OFB_MPLS_TC         )
 
 
 #endif /* DP_CAPABILITIES_H */

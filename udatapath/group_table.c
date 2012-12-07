@@ -183,9 +183,12 @@ group_table_delete(struct group_table *table, struct ofl_msg_group_mod *mod) {
 
 ofl_err
 group_table_handle_group_mod(struct group_table *table, struct ofl_msg_group_mod *mod,
-                                                          const struct sender *sender UNUSED) {
+                                                          const struct sender *sender) {
     ofl_err error;
     size_t i;
+
+    if(sender->remote->role == OFPCR_ROLE_SLAVE)
+        return ofl_error(OFPET_BAD_REQUEST, OFPBRC_IS_SLAVE);
 
     for (i=0; i< mod->buckets_num; i++) {
         error = dp_actions_validate(table->dp, mod->buckets[i]->actions_num, mod->buckets[i]->actions);
@@ -205,7 +208,7 @@ group_table_handle_group_mod(struct group_table *table, struct ofl_msg_group_mod
             return group_table_delete(table, mod);
         }
         default: {
-            return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_SUBTYPE);
+            return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_TYPE);
         }
     }
 }

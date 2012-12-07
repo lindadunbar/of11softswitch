@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil 
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #include "compiler.h"
@@ -130,9 +130,12 @@ handle_control_set_config(struct datapath *dp, struct ofl_msg_set_config *msg,
 /* Handles packet out messages. */
 static ofl_err
 handle_control_packet_out(struct datapath *dp, struct ofl_msg_packet_out *msg,
-                                                const struct sender *sender UNUSED) {
+                                                const struct sender *sender) {
     struct packet *pkt;
     int error;
+
+    if(sender->remote->role == OFPCR_ROLE_SLAVE)
+        return ofl_error(OFPET_BAD_REQUEST, OFPBRC_IS_SLAVE);
 
     error = dp_actions_validate(dp, msg->actions_num, msg->actions);
     if (error) {
@@ -332,6 +335,12 @@ handle_control_msg(struct datapath *dp, struct ofl_msg_header *msg,
         }
         case OFPT_QUEUE_GET_CONFIG_REQUEST: {
             return dp_ports_handle_queue_get_config_request(dp, (struct ofl_msg_queue_get_config_request *)msg, sender);
+        }
+        case OFPT_ROLE_REQUEST: {
+            return dp_handle_role_request(dp, (struct ofl_msg_role_request*)msg, sender);
+        }
+        case OFPT_ROLE_REPLY:{
+            return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_TYPE);
         }
         case OFPT_QUEUE_GET_CONFIG_REPLY: {
             return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_TYPE);

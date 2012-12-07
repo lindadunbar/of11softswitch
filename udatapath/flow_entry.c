@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil 
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,8 +26,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #include <stdbool.h>
@@ -44,7 +43,6 @@
 #include "packets.h"
 #include "timeval.h"
 #include "util.h"
-#include "match_std.h"
 
 #include "vlog.h"
 #define LOG_MODULE VLM_flow_e
@@ -101,24 +99,24 @@ flow_entry_matches(struct flow_entry *entry, struct ofl_msg_flow_mod *mod, bool 
 	if (check_cookie && ((entry->stats->cookie & mod->cookie_mask) != (mod->cookie & mod->cookie_mask))) {
 		return false;
 	}
-
+    
     if (strict) {
-        return (entry->stats->priority == mod->priority) &&
-               match_std_strict((struct ofl_match_standard *)mod->match,
-                                (struct ofl_match_standard *)entry->stats->match);
+        return ( (entry->stats->priority == mod->priority) &&
+                 match_std_strict((struct ofl_match *)mod->match,
+                                (struct ofl_match *)entry->stats->match));
     } else {
-        return match_std_nonstrict((struct ofl_match_standard *)mod->match,
-                                   (struct ofl_match_standard *)entry->stats->match);
+        return match_std_nonstrict((struct ofl_match *)mod->match,
+                                   (struct ofl_match *)entry->stats->match);
     }
 }
 
 bool
 flow_entry_overlaps(struct flow_entry *entry, struct ofl_msg_flow_mod *mod) {
-    return (entry->stats->priority == mod->priority &&
+        return (entry->stats->priority == mod->priority &&
             (mod->out_port == OFPP_ANY || flow_entry_has_out_port(entry, mod->out_port)) &&
             (mod->out_group == OFPG_ANY || flow_entry_has_out_group(entry, mod->out_group)) &&
-            match_std_overlap((struct ofl_match_standard *)entry->stats->match,
-                                            (struct ofl_match_standard *)mod->match));
+            match_std_overlap((struct ofl_match *)entry->stats->match,
+                                            (struct ofl_match *)mod->match));
 }
 
 
@@ -171,7 +169,7 @@ flow_entry_update(struct flow_entry *entry) {
 }
 
 
-/* Creates a modified match from the original match. */
+/* Creates a modified match from the original match. 
 static struct ofl_match_header *
 make_mod_match(struct ofl_match_header *match) {
     if (match->type != OFPMT_STANDARD) {
@@ -182,9 +180,9 @@ make_mod_match(struct ofl_match_header *match) {
 
         /* NOTE: According to 1.1 spec. only those protocols' fields should be taken into
                  account, which are explicitly matched (MPLS, ARP, IP, TCP, UDP).
-                 the rest of the fields are wildcarded in the created match. */
+                 the rest of the fields are wildcarded in the created match. /
 
-        /* IPv4 / ARP */
+        /* IPv4 / ARP/
         if (((m->wildcards & OFPFW_DL_TYPE) != 0) ||
             (m->dl_type != ETH_TYPE_IP && m->dl_type != ETH_TYPE_ARP)) {
             m->wildcards |= OFPFW_NW_TOS;
@@ -193,7 +191,7 @@ make_mod_match(struct ofl_match_header *match) {
             m->nw_dst_mask = 0xffffffff;
         }
 
-        /* Transport */
+        /* Transport /
         if (((m->wildcards & OFPFW_NW_PROTO) != 0) ||
             (m->nw_proto != IP_TYPE_ICMP && m->nw_proto != IP_TYPE_TCP &&
              m->nw_proto != IP_TYPE_UDP  && m->nw_proto != IP_TYPE_SCTP)) {
@@ -201,7 +199,7 @@ make_mod_match(struct ofl_match_header *match) {
             m->wildcards |= OFPFW_TP_DST;
         }
 
-        /* MPLS */
+        /* MPLS /
         if (m->dl_type != ETH_TYPE_MPLS && m->dl_type != ETH_TYPE_MPLS_MCAST) {
             m->wildcards |= OFPFW_MPLS_LABEL;
             m->wildcards |= OFPFW_MPLS_TC;
@@ -209,7 +207,7 @@ make_mod_match(struct ofl_match_header *match) {
 
         return (struct ofl_match_header *)m;
     }
-}
+}*/
 
 /* Returns true if the flow entry has a reference to the given group. */
 static bool
@@ -296,6 +294,7 @@ flow_entry_create(struct datapath *dp, struct flow_table *table, struct ofl_msg_
     entry->stats->duration_sec     = 0;
     entry->stats->duration_nsec    = 0;
     entry->stats->priority         = mod->priority;
+    entry->stats->importance = mod->importance;  //modified by dingwanfu.
     entry->stats->idle_timeout     = mod->idle_timeout;
     entry->stats->hard_timeout     = mod->hard_timeout;
     entry->stats->cookie           = mod->cookie;
@@ -306,7 +305,7 @@ flow_entry_create(struct datapath *dp, struct flow_table *table, struct ofl_msg_
     entry->stats->instructions_num = mod->instructions_num;
     entry->stats->instructions     = mod->instructions;
 
-    entry->match = make_mod_match(mod->match);
+    entry->match = mod->match; /* TODO: MOD MATCH? */
 
     entry->created      = now;
     entry->remove_at    = mod->hard_timeout == 0 ? 0
@@ -331,7 +330,7 @@ flow_entry_destroy(struct flow_entry *entry) {
     del_group_refs(entry);
     ofl_structs_free_flow_stats(entry->stats, entry->dp->exp);
     // assumes it is a standard match
-    free(entry->match);
+    //free(entry->match);
     free(entry);
 }
 

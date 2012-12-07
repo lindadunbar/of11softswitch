@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil 
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,8 +26,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #include <stdlib.h>
@@ -68,21 +67,9 @@ struct action_set_entry {
 static int
 action_set_order(struct ofl_action_header *act) {
     switch (act->type) {
-        case (OFPAT_OUTPUT):         return 90;
-        case (OFPAT_SET_VLAN_VID):   return 60;
-        case (OFPAT_SET_VLAN_PCP):   return 60;
-        case (OFPAT_SET_DL_SRC):     return 60;
-        case (OFPAT_SET_DL_DST):     return 60;
-        case (OFPAT_SET_NW_SRC):     return 60;
-        case (OFPAT_SET_NW_DST):     return 60;
-        case (OFPAT_SET_NW_TOS):     return 60;
-        case (OFPAT_SET_NW_ECN):     return 60;
-        case (OFPAT_SET_TP_SRC):     return 60;
-        case (OFPAT_SET_TP_DST):     return 60;
         case (OFPAT_COPY_TTL_OUT):   return 40;
         case (OFPAT_COPY_TTL_IN):    return 10;
-        case (OFPAT_SET_MPLS_LABEL): return 60;
-        case (OFPAT_SET_MPLS_TC):    return 60;
+        case (OFPAT_SET_FIELD):      return 60;
         case (OFPAT_SET_MPLS_TTL):   return 60;
         case (OFPAT_DEC_MPLS_TTL):   return 50;
         case (OFPAT_PUSH_VLAN):      return 30;
@@ -93,6 +80,7 @@ action_set_order(struct ofl_action_header *act) {
         case (OFPAT_GROUP):          return 80;
         case (OFPAT_SET_NW_TTL):     return 60;
         case (OFPAT_DEC_NW_TTL):     return 50;
+        case (OFPAT_OUTPUT):         return 90;
         case (OFPAT_EXPERIMENTER):   return 75;
         default:                     return 79;
     }

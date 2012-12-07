@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil 
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,8 +26,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #ifndef FLOW_TABLE_H
@@ -38,7 +37,9 @@
 #include "timeval.h"
 
 
-#define FLOW_TABLE_MAX_ENTRIES 1024
+//#define FLOW_TABLE_MAX_ENTRIES 1024
+
+#define FLOW_TABLE_MAX_ENTRIES 10 //modified by dingwanfu
 
 /****************************************************************************
  * Implementation of a flow table. The current implementation stores flow
@@ -72,6 +73,9 @@ flow_table_timeout(struct flow_table *table);
 /* Creates a flow table. */
 struct flow_table *
 flow_table_create(struct datapath *dp, uint8_t table_id);
+
+ofl_err
+flow_table_eviction_importance(struct flow_table *table,  struct ofl_msg_flow_mod *mod, bool *match_kept, bool *insts_kept );
 
 /* Destroys a flow table. */
 void

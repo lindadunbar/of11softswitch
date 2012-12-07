@@ -33,9 +33,8 @@
 
 
 /* The original Stanford code has been modified during the implementation of
- * the OpenFlow 1.1 userspace switch.
+ * the OpenFlow 1.2 userspace switch.
  *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #include "datapath.h"
@@ -48,7 +47,6 @@
 #include "csum.h"
 #include "dp_buffers.h"
 #include "dp_control.h"
-#include "flow.h"
 #include "ofp.h"
 #include "ofpbuf.h"
 #include "group_table.h"
@@ -66,7 +64,6 @@
 #include "rconn.h"
 #include "stp.h"
 #include "vconn.h"
-#include "xtoxll.h"
 
 #define LOG_MODULE VLM_dp
 
@@ -80,37 +77,10 @@ static void remote_destroy(struct remote *);
 
 
 #define MFR_DESC     "Stanford University and Ericsson Research"
-#define HW_DESC      "OpenFlow 1.1 Reference Userspace Switch"
+#define HW_DESC      "OpenFlow 1.2 Reference Userspace Switch"
 #define SW_DESC      __DATE__" "__TIME__
-#define DP_DESC      "OpenFlow 1.1 Reference Userspace Switch Datapath"
+#define DP_DESC      "OpenFlow 1.2 Reference Userspace Switch Datapath"
 #define SERIAL_NUM   "1"
-
-
-
-/* The origin of a received OpenFlow message, to enable sending a reply. */
-struct sender {
-    struct remote *remote;      /* The device that sent the message. */
-    uint32_t xid;               /* The OpenFlow transaction ID. */
-};
-
-/* A connection to a secure channel. */
-struct remote {
-    struct list node;
-    struct rconn *rconn;
-#define TXQ_LIMIT 128           /* Max number of packets to queue for tx. */
-    int n_txq;                  /* Number of packets queued for tx on rconn. */
-
-    /* Support for reliable, multi-message replies to requests.
-     *
-     * If an incoming request needs to have a reliable reply that might
-     * require multiple messages, it can use remote_start_dump() to set up
-     * a callback that will be called as buffer space for replies. */
-    int (*cb_dump)(struct datapath *, void *aux);
-    void (*cb_done)(void *aux);
-    void *cb_aux;
-
-    uint32_t role; /* Nicira experimenter role. See nicira-ext.h for details. */
-};
 
 
 /* Callbacks for processing experimenter messages in OFLib. */
@@ -155,7 +125,9 @@ dp_new(void) {
 
 
     dp->id = gen_datapath_id();
-
+   
+    dp->generation_id = -1; 
+    
     dp->last_timeout = time_now();
     list_init(&dp->remotes);
     dp->listeners = NULL;
@@ -330,7 +302,7 @@ remote_create(struct datapath *dp, struct rconn *rconn)
     remote->rconn = rconn;
     remote->cb_dump = NULL;
     remote->n_txq = 0;
-    remote->role = NX_ROLE_OTHER;
+    remote->role = OFPCR_ROLE_EQUAL;
     return remote;
 }
 
@@ -400,11 +372,13 @@ dp_set_max_queues(struct datapath *dp, uint32_t max_queues) {
 static int
 send_openflow_buffer_to_remote(struct ofpbuf *buffer, struct remote *remote) {
     int retval = rconn_send_with_limit(remote->rconn, buffer, &remote->n_txq,
-                                       TXQ_LIMIT);
+                                      TXQ_LIMIT);
+     
     if (retval) {
         VLOG_WARN_RL(LOG_MODULE, &rl, "send to %s failed: %s",
                      rconn_get_name(remote->rconn), strerror(retval));
     }
+    
     return retval;
 }
 
@@ -420,7 +394,7 @@ send_openflow_buffer(struct datapath *dp, struct ofpbuf *buffer,
         struct remote *r, *prev = NULL;
         LIST_FOR_EACH (r, struct remote, node, &dp->remotes) {
             /* do not send to remotes with slave role */
-            if (r->role == NX_ROLE_SLAVE) {
+            if (r->role == OFPCR_ROLE_SLAVE) {
                 continue;
             }
             if (prev) {
@@ -430,7 +404,7 @@ send_openflow_buffer(struct datapath *dp, struct ofpbuf *buffer,
         }
         if (prev) {
             send_openflow_buffer_to_remote(buffer, prev);
-        } else {
+        } else {   
             ofpbuf_delete(buffer);
         }
         return 0;
@@ -456,11 +430,9 @@ dp_send_message(struct datapath *dp, struct ofl_msg_header *msg,
         VLOG_WARN_RL(LOG_MODULE, &rl, "There was an error packing the message!");
         return error;
     }
-
     ofpbuf = ofpbuf_new(0);
     ofpbuf_use(ofpbuf, buf, buf_size);
     ofpbuf_put_uninit(ofpbuf, buf_size);
-
     error = send_openflow_buffer(dp, ofpbuf, sender);
     if (error) {
         VLOG_WARN_RL(LOG_MODULE, &rl, "There was an error sending the message!");
@@ -468,7 +440,6 @@ dp_send_message(struct datapath *dp, struct ofl_msg_header *msg,
         ofpbuf_delete(ofpbuf);
         return error;
     }
-
     return 0;
 }
 
@@ -480,46 +451,65 @@ dp_handle_set_desc(struct datapath *dp, struct ofl_exp_openflow_msg_set_dp_desc 
     return 0;
 }
 
+static ofl_err
+dp_check_generation_id(struct datapath *dp, uint64_t new_gen_id){
+
+    if(dp->generation_id >= 0  && ((int64_t)(dp->generation_id - new_gen_id) < 0) )
+        return ofl_error(OFPET_ROLE_REQUEST_FAILED, OFPRRFC_STALE);
+    else dp->generation_id = new_gen_id;
+    return 0;
+    
+}
+
 ofl_err
-dp_handle_nx_role(struct datapath *dp, struct ofl_exp_nicira_msg_role *msg,
+dp_handle_role_request(struct datapath *dp, struct ofl_msg_role_request *msg,
                                             const struct sender *sender) {
     switch (msg->role) {
-        case NX_ROLE_MASTER: {
-            /* Old master(s) must be changed to slave(s) */
+        case OFPCR_ROLE_MASTER: {
             struct remote *r;
+            int error = dp_check_generation_id(dp,msg->generation_id);
+            if (error) {
+                VLOG_WARN_RL(LOG_MODULE, &rl, "Role message generation id is smaller than the current id!");
+                return error;
+            }
+            /* Old master(s) must be changed to slave(s) */
             LIST_FOR_EACH (r, struct remote, node, &dp->remotes) {
-                if (r->role == NX_ROLE_MASTER) {
-                    r->role = NX_ROLE_SLAVE;
+                if (r->role == OFPCR_ROLE_MASTER) {
+                    r->role = OFPCR_ROLE_SLAVE;
                 }
             }
-            sender->remote->role = NX_ROLE_MASTER;
+            sender->remote->role = OFPCR_ROLE_MASTER;
             break;
         }
 
-        case NX_ROLE_SLAVE: {
-            sender->remote->role = NX_ROLE_SLAVE;
+        case OFPCR_ROLE_SLAVE: {
+            int error = dp_check_generation_id(dp,msg->generation_id);
+            if (error) {
+                VLOG_WARN_RL(LOG_MODULE, &rl, "Role message generation id is smaller than the current id!");
+                return error;
+            }
+            sender->remote->role = OFPCR_ROLE_SLAVE;
             break;
         }
 
-        case NX_ROLE_OTHER: {
-            sender->remote->role = NX_ROLE_OTHER;
+        case OFPCR_ROLE_EQUAL: {
+            sender->remote->role = OFPCR_ROLE_EQUAL;
             break;
         }
 
         default: {
-            VLOG_WARN_RL(LOG_MODULE, &rl, "Nicira Role request with unknown role (%u).", msg->role);
-            return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_EXPERIMENTER);
+            VLOG_WARN_RL(LOG_MODULE, &rl, "Role request with unknown role (%u).", msg->role);
+            return ofl_error(OFPET_ROLE_REQUEST_FAILED, OFPRRFC_BAD_ROLE);
         }
     }
 
     {
-        struct ofl_exp_nicira_msg_role reply =
-            {{{{.type = OFPT_EXPERIMENTER},
-               .experimenter_id = NX_VENDOR_ID},
-              .type = NXT_ROLE_REPLY},
-             .role = msg->role};
+    struct ofl_msg_role_request reply =
+        {{.type = OFPT_ROLE_REPLY},
+            .role = msg->role,
+            .generation_id = msg->role};
 
-        dp_send_message(dp, (struct ofl_msg_header *)&reply, sender);
+    dp_send_message(dp, (struct ofl_msg_header *)&reply, sender);
     }
     return 0;
 }

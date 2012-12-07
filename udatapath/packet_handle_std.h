@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil  
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,8 +26,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #ifndef PACKET_HANDLE_STD_H
@@ -36,37 +35,24 @@
 #include <stdio.h>
 #include "packet.h"
 #include "packets.h"
+#include "match_std.h"
 #include "oflib/ofl-structs.h"
+#include "nbee_link/nbee_link.h"
 
 /****************************************************************************
  * A handler processing a datapath packet for standard matches.
  ****************************************************************************/
 
-/* A structure holding references to supported protocols within the packet. */
-struct protocols_std {
-    struct eth_header      *eth;
-    struct snap_header     *eth_snap; /* points to SNAP header if eth is 802.3 */
-    struct vlan_header     *vlan;
-    struct vlan_header     *vlan_last; /* points to the last VLAN header */
-    struct mpls_header     *mpls;
-    struct ip_header       *ipv4;
-    struct arp_eth_header  *arp;
-    struct tcp_header      *tcp;
-    struct udp_header      *udp;
-    struct sctp_header     *sctp;
-    struct icmp_header     *icmp;
-};
-
 /* The data associated with the handler */
 struct packet_handle_std {
-    struct packet              *pkt;
-    struct protocols_std       *proto;
-    struct ofl_match_standard  *match; /* Match fields extracted from the packet
-                                            are also stored in a match structure
-                                            for convenience */
-    bool                        valid; /* Set to true if the handler data is valid.
-                                            if false, it is revalidated before
-                                            executing any methods. */
+   struct packet              *pkt;
+   struct protocols_std       *proto;
+   struct ofl_match  match;  /* Match fields extracted from the packet
+                                           are also stored in a match structure
+                                           for convenience */
+   bool                        valid; /* Set to true if the handler data is valid.
+                                           if false, it is revalidated before
+                                           executing any methods. */
 };
 
 /* Creates a handler */
@@ -87,7 +73,7 @@ packet_handle_std_is_fragment(struct packet_handle_std *handle);
 
 /* Returns true if the packet matches the given standard match structure. */
 bool
-packet_handle_std_match(struct packet_handle_std *handle, struct ofl_match_standard *match);
+packet_handle_std_match(struct packet_handle_std *handle,  struct ofl_match *match);
 
 /* Converts the packet to a string representation */
 char *

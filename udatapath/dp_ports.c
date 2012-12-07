@@ -639,7 +639,11 @@ dp_ports_output_all(struct datapath *dp, struct ofpbuf *buffer, int in_port, boo
 
 ofl_err
 dp_ports_handle_port_mod(struct datapath *dp, struct ofl_msg_port_mod *msg,
-                                                const struct sender *sender UNUSED) {
+                                                const struct sender *sender) {
+
+    if(sender->remote->role == OFPCR_ROLE_SLAVE)
+        return ofl_error(OFPET_BAD_REQUEST, OFPBRC_IS_SLAVE);
+
     struct sw_port *p = dp_ports_lookup(dp, msg->port_no);
 
     if (p == NULL) {

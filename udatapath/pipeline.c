@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil  
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,8 +26,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #include <sys/types.h>
@@ -46,8 +45,12 @@
 #include "flow_entry.h"
 #include "oflib/ofl.h"
 #include "oflib/ofl-structs.h"
+#include "nbee_link/nbee_link.h"
 #include "util.h"
+#include "hash.h"
+#include "oflib/oxm-match.h"
 #include "vlog.h"
+
 
 #define LOG_MODULE VLM_pipeline
 
@@ -72,28 +75,46 @@ pipeline_create(struct datapath *dp) {
     }
     pl->dp = dp;
 
+    nblink_initialize();
+    
     return pl;
 }
+
+
 
 /* Sends a packet to the controller in a packet_in message */
 static void
 send_packet_to_controller(struct pipeline *pl, struct packet *pkt, uint8_t table_id, uint8_t reason) {
-    dp_buffers_save(pl->dp->buffers, pkt);
 
-    {
-        struct ofl_msg_packet_in msg =
-                {{.type = OFPT_PACKET_IN},
-                 .buffer_id   = pkt->buffer_id,
-                 .in_port     = pkt->in_port,
-                 .in_phy_port = pkt->in_port, // TODO: how to get phy port for v.port?
-                 .total_len   = pkt->buffer->size,
-                 .reason      = reason,
-                 .table_id    = table_id,
-                 .data_length = MIN(pl->dp->config.miss_send_len, pkt->buffer->size),
-                 .data        = pkt->buffer->data};
-
-        dp_send_message(pl->dp, (struct ofl_msg_header *)&msg, NULL);
+    struct ofl_msg_packet_in msg;
+    struct ofl_match *m;
+    msg.header.type = OFPT_PACKET_IN;
+    msg.total_len   = pkt->buffer->size;
+    msg.reason      = reason;
+    msg.table_id    = table_id;
+    msg.data = pkt->buffer->data;
+          
+    /* A max_len of OFPCML_NO_BUFFER means that the complete
+        packet should be sent, and it should not be buffered.*/
+    if (pl->dp->config.miss_send_len != OFPCML_NO_BUFFER){
+        dp_buffers_save(pl->dp->buffers, pkt);
+        msg.buffer_id   = pkt->buffer_id;
+        msg.data_length = MIN(pl->dp->config.miss_send_len, pkt->buffer->size);
+    }else {
+        msg.buffer_id   = OFP_NO_BUFFER;
+        msg.data_length = pkt->buffer->size;
     }
+ 
+    m = xmalloc (sizeof(struct ofl_match));
+    ofl_structs_match_init(m);
+    /* In this implementation the fields in_port and in_phy_port 
+        always will be the same, because we are not considering logical
+        ports                                 */
+    ofl_structs_match_convert_pktf2oflm(&pkt->handle_std->match.match_fields, m);
+    msg.match = (struct ofl_match_header*)m;
+    dp_send_message(pl->dp, (struct ofl_msg_header *)&msg, NULL);
+    ofl_structs_free_match((struct ofl_match_header* ) m, NULL); 
+    
 }
 
 void
@@ -105,13 +126,12 @@ pipeline_process_packet(struct pipeline *pl, struct packet *pkt) {
         VLOG_DBG_RL(LOG_MODULE, &rl, "processing packet: %s", pkt_str);
         free(pkt_str);
     }
-
+ 
     if (!packet_handle_std_is_ttl_valid(pkt->handle_std)) {
         if ((pl->dp->config.flags & OFPC_INVALID_TTL_TO_CONTROLLER) != 0) {
             VLOG_DBG_RL(LOG_MODULE, &rl, "Packet has invalid TTL, sending to controller.");
 
-            /* NOTE: no valid reason for invalid ttl in spec. */
-            send_packet_to_controller(pl, pkt, 0/*table_id*/, OFPR_NO_MATCH);
+            send_packet_to_controller(pl, pkt, 0/*table_id*/, OFPR_INVALID_TTL);
         } else {
             VLOG_DBG_RL(LOG_MODULE, &rl, "Packet has invalid TTL, dropping.");
         }
@@ -120,7 +140,6 @@ pipeline_process_packet(struct pipeline *pl, struct packet *pkt) {
     }
 
     next_table = pl->tables[0];
-
     while (next_table != NULL) {
         struct flow_entry *entry;
 
@@ -129,11 +148,10 @@ pipeline_process_packet(struct pipeline *pl, struct packet *pkt) {
         pkt->table_id = next_table->stats->table_id;
         table         = next_table;
         next_table    = NULL;
-
+        
         entry = flow_table_lookup(table, pkt);
-
         if (entry != NULL) {
-            if (VLOG_IS_DBG_ENABLED(LOG_MODULE)) {
+	   if (VLOG_IS_DBG_ENABLED(LOG_MODULE)) {
                 char *m = ofl_structs_flow_stats_to_string(entry->stats, pkt->dp->exp);
                 VLOG_DBG_RL(LOG_MODULE, &rl, "found matching entry: %s.", m);
                 free(m);
@@ -162,15 +180,19 @@ pipeline_process_packet(struct pipeline *pl, struct packet *pkt) {
 
 ofl_err
 pipeline_handle_flow_mod(struct pipeline *pl, struct ofl_msg_flow_mod *msg,
-                                                const struct sender *sender UNUSED) {
+                                                const struct sender *sender) {
     /* Note: the result of using table_id = 0xff is undefined in the spec.
      *       for now it is accepted for delete commands, meaning to delete
      *       from all tables */
     ofl_err error;
     size_t i;
+    bool match_kept,insts_kept; 
 
-    bool match_kept = false;
-    bool insts_kept = false;
+    if(sender->remote->role == OFPCR_ROLE_SLAVE)
+        return ofl_error(OFPET_BAD_REQUEST, OFPBRC_IS_SLAVE);
+
+    match_kept = false;
+    insts_kept = false;
 
     // Validate actions in flow_mod
     for (i=0; i< msg->instructions_num; i++) {
@@ -216,9 +238,8 @@ pipeline_handle_flow_mod(struct pipeline *pl, struct ofl_msg_flow_mod *msg,
             struct packet *pkt;
 
             pkt = dp_buffers_retrieve(pl->dp->buffers, msg->buffer_id);
-
             if (pkt != NULL) {
-                pipeline_process_packet(pl, pkt);
+		pipeline_process_packet(pl, pkt);
             } else {
                 VLOG_WARN_RL(LOG_MODULE, &rl, "The buffer flow_mod referred to was empty (%u).", msg->buffer_id);
             }
@@ -233,7 +254,11 @@ pipeline_handle_flow_mod(struct pipeline *pl, struct ofl_msg_flow_mod *msg,
 ofl_err
 pipeline_handle_table_mod(struct pipeline *pl,
                           struct ofl_msg_table_mod *msg,
-                          const struct sender *sender UNUSED) {
+                          const struct sender *sender) {
+                          
+    if(sender->remote->role == OFPCR_ROLE_SLAVE)
+        return ofl_error(OFPET_BAD_REQUEST, OFPBRC_IS_SLAVE);    
+    
     if (msg->table_id == 0xff) {
         size_t i;
 
@@ -403,15 +428,17 @@ execute_entry(struct pipeline *pl, struct flow_entry *entry,
             }
             case OFPIT_WRITE_METADATA: {
                 struct ofl_instruction_write_metadata *wi = (struct ofl_instruction_write_metadata *)inst;
-                struct ofl_match_standard *m;
-
+                struct  packet_fields *f;
                 /* NOTE: Hackish solution. If packet had multiple handles, metadata
                  *       should be updated in all. */
+                 
                 packet_handle_std_validate(pkt->handle_std);
-                m = (struct ofl_match_standard *)pkt->handle_std->match;
-
-                m->metadata =
-                        (m->metadata & ~wi->metadata_mask) | (wi->metadata & wi->metadata_mask);
+                
+                /* Search field on the description of the packet. */
+                HMAP_FOR_EACH_WITH_HASH(f,struct packet_fields, hmap_node, hash_int(OXM_OF_METADATA,0), &pkt->handle_std->match.match_fields){
+                    uint64_t *metadata = (uint64_t*) f->value; 
+                    memset(f->value,(*metadata & ~wi->metadata_mask) | (wi->metadata & wi->metadata_mask), sizeof(uint64_t));     
+                }
                 break;
             }
             case OFPIT_WRITE_ACTIONS: {
@@ -482,7 +509,7 @@ execute_table(struct pipeline *pl, struct flow_table *table,
             VLOG_DBG_RL(LOG_MODULE, &rl, "Packet-in disabled on port (%u)", p->stats->port_no);
             return;
         }
-
+        
         send_packet_to_controller(pl, pkt, table->stats->table_id, OFPR_NO_MATCH);
     }
 }

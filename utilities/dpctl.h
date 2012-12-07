@@ -108,44 +108,16 @@ static struct names32 buffer_names[] = {
         {0xffffffff, "none"}
 };
 
-
-static struct names32 wildcard_names[] = {
-        {OFPFW_IN_PORT,     "in_port"},
-        {OFPFW_DL_VLAN,     "dl_vlan"},
-        {OFPFW_DL_VLAN_PCP, "dl_vlan_pcp"},
-        {OFPFW_DL_TYPE,     "dl_type"},
-        {OFPFW_NW_TOS,      "nw_tos"},
-        {OFPFW_NW_PROTO,    "nw_proto"},
-        {OFPFW_TP_SRC,      "tp_src"},
-        {OFPFW_TP_DST,      "tp_dst"},
-        {OFPFW_MPLS_LABEL,  "mpls_label"},
-        {OFPFW_MPLS_TC,     "mpls_tc"},
-        {OFPFW_ALL,         "all"}
-};
-
-
 static struct names16 vlan_vid_names[] = {
-        {OFPVID_ANY,  "any"},
+        {OFPVID_PRESENT,  "any"},
         {OFPVID_NONE, "none"}
 };
 
 
 static struct names16 action_names[] = {
         {OFPAT_OUTPUT,         "output"},
-        {OFPAT_SET_VLAN_VID,   "vlan_vid"},
-        {OFPAT_SET_VLAN_PCP,   "vlan_pcp"},
-        {OFPAT_SET_DL_SRC,     "dl_src"},
-        {OFPAT_SET_DL_DST,     "dl_dst"},
-        {OFPAT_SET_NW_SRC,     "nw_src"},
-        {OFPAT_SET_NW_DST,     "nw_dst"},
-        {OFPAT_SET_NW_TOS,     "nw_tos"},
-        {OFPAT_SET_NW_ECN,     "nw_ecn"},
-        {OFPAT_SET_TP_SRC,     "tp_src"},
-        {OFPAT_SET_TP_DST,     "tp_dst"},
         {OFPAT_COPY_TTL_OUT,   "ttl_out"},
         {OFPAT_COPY_TTL_IN,    "ttl_in"},
-        {OFPAT_SET_MPLS_LABEL, "mpls_label"},
-        {OFPAT_SET_MPLS_TC,    "mpls_tc"},
         {OFPAT_SET_MPLS_TTL,   "mpls_ttl"},
         {OFPAT_DEC_MPLS_TTL,   "mpls_dec"},
         {OFPAT_PUSH_VLAN,      "push_vlan"},
@@ -155,7 +127,8 @@ static struct names16 action_names[] = {
         {OFPAT_SET_QUEUE,      "queue"},
         {OFPAT_GROUP,          "group"},
         {OFPAT_SET_NW_TTL,     "nw_ttl"},
-        {OFPAT_DEC_NW_TTL,     "nw_dec"}
+        {OFPAT_DEC_NW_TTL,     "nw_dec"},
+        {OFPAT_SET_FIELD,      "set_field"}
 };
 
 #define FLOW_MOD_COMMAND       "cmd"
@@ -165,6 +138,9 @@ static struct names16 action_names[] = {
 #define FLOW_MOD_IDLE          "idle"
 #define FLOW_MOD_HARD          "hard"
 #define FLOW_MOD_PRIO          "prio"
+
+#define FLOW_MOD_IMPO          "impo"  //modified by dingwanfu
+
 #define FLOW_MOD_BUFFER        "buffer"
 #define FLOW_MOD_OUT_PORT      "out_port"
 #define FLOW_MOD_OUT_GROUP     "out_group"
@@ -173,22 +149,41 @@ static struct names16 action_names[] = {
 
 
 #define MATCH_IN_PORT       "in_port"
-#define MATCH_WILDCARDS     "wildcards"
-#define MATCH_DL_SRC        "dl_src"
-#define MATCH_DL_SRC_MASK   "dl_src_mask"
-#define MATCH_DL_DST        "dl_dst"
-#define MATCH_DL_DST_MASK   "dl_dst_mask"
-#define MATCH_DL_VLAN       "vlan"
+#define MATCH_DL_SRC        "eth_src"
+#define MATCH_DL_SRC_MASK   "eth_src_mask"
+#define MATCH_DL_DST        "eth_dst"
+#define MATCH_DL_DST_MASK   "eth_dst_mask"
+#define MATCH_DL_VLAN       "vlan_vid"
+#define MATCH_IP_DSCP	    "ip_dscp"
+#define MATCH_IP_ECN	    "ip_ecn"
 #define MATCH_DL_VLAN_PCP   "vlan_pcp"
-#define MATCH_DL_TYPE       "dl_type"
-#define MATCH_NW_TOS        "nw_tos"
-#define MATCH_NW_PROTO      "nw_proto"
-#define MATCH_NW_SRC        "nw_src"
+#define MATCH_DL_TYPE       "eth_type"
+#define MATCH_NW_PROTO      "ip_proto"
+#define MATCH_NW_SRC        "ip_src"
 #define MATCH_NW_SRC_MASK   "nw_src_mask"
-#define MATCH_NW_DST        "nw_dst"
-#define MATCH_NW_DST_MASK   "nw_dst_mask"
-#define MATCH_TP_SRC        "tp_src"
-#define MATCH_TP_DST        "tp_dst"
+#define MATCH_NW_DST        "ip_dst"
+#define MATCH_NW_DST_MASK   "ipv4_dst_mask"
+#define MATCH_TP_SRC        "tcp_src"
+#define MATCH_TP_DST        "tcp_dst"
+#define MATCH_UDP_SRC	    "udp_src"
+#define MATCH_UDP_DST       "udp_dst"
+#define MATCH_SCTP_SRC      "sctp_src"
+#define MATCH_SCTP_DST      "sctp_dst"
+#define MATCH_ICMPV4_CODE   "icmp_code"
+#define MATCH_ICMPV4_TYPE   "icmp_type"
+#define MATCH_ARP_OP            "arp_op"
+#define MATCH_ARP_SHA       "arp_sha"
+#define MATCH_ARP_THA       "arp_tha"
+#define MATCH_ARP_SPA       "arp_spa"
+#define MATCH_ARP_TPA       "arp_tpa"
+#define MATCH_NW_SRC_IPV6   "ipv6_src"
+#define MATCH_NW_DST_IPV6   "ipv6_dst"
+#define MATCH_ICMPV6_CODE   "icmpv6_code"
+#define MATCH_ICMPV6_TYPE   "icmpv6_type"
+#define MATCH_IPV6_FLABEL   "ipv6_flabel"
+#define MATCH_IPV6_ND_TARGET "ipv6_nd_target"
+#define MATCH_IPV6_ND_SLL      "ipv6_nd_sll"
+#define MATCH_IPV6_ND_TLL      "ipv6_nd_tll"
 #define MATCH_MPLS_LABEL    "mpls_label"
 #define MATCH_MPLS_TC       "mpls_tc"
 #define MATCH_METADATA      "meta"

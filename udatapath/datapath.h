@@ -34,7 +34,6 @@
 /* The original Stanford code has been modified during the implementation of
  * the OpenFlow 1.1 userspace switch.
  *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #ifndef DATAPATH_H
@@ -78,6 +77,8 @@ struct datapath {
 
     struct list remotes;        /* Remote connections. */
 
+    uint64_t generation_id;     /* Identifies a given mastership view */
+
     /* Listeners. */
     struct pvconn **listeners;
     size_t n_listeners;
@@ -111,6 +112,31 @@ struct datapath {
     of_hw_driver_t *hw_drv;
     struct hw_pkt_q_entry *hw_pkt_list_head, *hw_pkt_list_tail;
 #endif
+};
+
+/* The origin of a received OpenFlow message, to enable sending a reply. */
+struct sender {
+    struct remote *remote;      /* The device that sent the message. */
+    uint32_t xid;               /* The OpenFlow transaction ID. */
+};
+
+/* A connection to a secure channel. */
+struct remote {
+    struct list node;
+    struct rconn *rconn;
+#define TXQ_LIMIT 128           /* Max number of packets to queue for tx. */
+    int n_txq;                  /* Number of packets queued for tx on rconn. */
+
+    /* Support for reliable, multi-message replies to requests.
+     *
+     * If an incoming request needs to have a reliable reply that might
+     * require multiple messages, it can use remote_start_dump() to set up
+     * a callback that will be called as buffer space for replies. */
+    int (*cb_dump)(struct datapath *, void *aux);
+    void (*cb_done)(void *aux);
+    void *cb_aux;
+
+    uint32_t role; /*OpenFlow controller role.*/
 };
 
 /* Creates a new datapath */
@@ -170,7 +196,7 @@ dp_handle_set_desc(struct datapath *dp, struct ofl_exp_openflow_msg_set_dp_desc 
 
 /* Handles a role request (nicira experimenter) message */
 ofl_err
-dp_handle_nx_role(struct datapath *dp, struct ofl_exp_nicira_msg_role *msg,
+dp_handle_role_request(struct datapath *dp, struct ofl_msg_role_request *msg,
                                             const struct sender *sender);
 
 #endif /* datapath.h */

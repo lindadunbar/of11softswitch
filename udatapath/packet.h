@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ 
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,10 +36,11 @@
 #include <stdbool.h>
 #include "action_set.h"
 #include "datapath.h"
+#include "packet_handle_std.h"
 #include "ofpbuf.h"
 #include "oflib/ofl-structs.h"
 #include "packets.h"
-#include "packet_handle_std.h"
+
 
 /****************************************************************************
  * Represents a packet received on the datapath, and its associated processing

@@ -64,7 +64,7 @@ dp_exp_stats(struct datapath *dp UNUSED,
                                   struct ofl_msg_stats_request_experimenter *msg,
                                   const struct sender *sender UNUSED) {
 	VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to handle unknown experimenter stats (%u).", msg->experimenter_id);
-    return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_SUBTYPE);
+    return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_EXPERIMENTER);
 }
 
 
@@ -89,21 +89,10 @@ dp_exp_message(struct datapath *dp,
                 }
                 default: {
                 	VLOG_WARN_RL(LOG_MODULE, &rl, "Trying to handle unknown experimenter type (%u).", exp->type);
-                    return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_SUBTYPE);
+                    return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_EXPERIMENTER);
                 }
             }
         }
-
-        case (NX_VENDOR_ID): {
-            struct ofl_exp_nicira_msg_header *exp = (struct ofl_exp_nicira_msg_header *)msg;
-
-            switch (exp->type) {
-                case (NXT_ROLE_REQUEST): {
-                    return dp_handle_nx_role(dp, (struct ofl_exp_nicira_msg_role *)msg, sender);
-                }
-            }
-        }
-
         default: {
             return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_EXPERIMENTER);
         }

@@ -31,16 +31,16 @@ udatapath_ofdatapath_SOURCES = \
 	udatapath/group_entry.c \
 	udatapath/group_entry.h \
 	udatapath/match_std.c \
-	udatapath/match_std.h \
+        udatapath/match_std.h \
 	udatapath/packet.c \
 	udatapath/packet.h \
 	udatapath/packet_handle_std.c \
-	udatapath/packet_handle_std.h \
+        udatapath/packet_handle_std.h \
 	udatapath/pipeline.c \
 	udatapath/pipeline.h \
 	udatapath/udatapath.c
 
-udatapath_ofdatapath_LDADD = lib/libopenflow.a oflib/liboflib.a oflib-exp/liboflib_exp.a $(SSL_LIBS) $(FAULT_LIBS)
+udatapath_ofdatapath_LDADD = lib/libopenflow.a oflib/liboflib.a oflib-exp/liboflib_exp.a nbee_link/libnbee_link.a $(SSL_LIBS) $(FAULT_LIBS)
 udatapath_ofdatapath_CPPFLAGS = $(AM_CPPFLAGS)
 
 EXTRA_DIST += udatapath/ofdatapath.8.in
@@ -96,6 +96,6 @@ udatapath_libudatapath_a_SOURCES = \
 	udatapath/udatapath.c
 
 udatapath_libudatapath_a_CPPFLAGS = $(AM_CPPFLAGS)
-udatapath_libudatapath_a_CPPFLAGS += -DOF_HW_PLAT -DUDATAPATH_AS_LIB -g
+udatapath_libudatapath_a_CPPFLAGS += -DOF_HW_PLAT -DUDATAPATH_AS_LIB -g -lnbee_link
 
 endif

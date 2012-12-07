@@ -1,4 +1,5 @@
 /* Copyright (c) 2011, TrafficLab, Ericsson Research, Hungary
+ * Copyright (c) 2012, CPqD, Brazil  
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,8 +26,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *
- * Author: Zoltán Lajos Kis <zoltan.lajos.kis@ericsson.com>
  */
 
 #include <stdlib.h>
@@ -97,6 +96,7 @@ void
 packet_destroy(struct packet *pkt) {
     /* If packet is saved in a buffer, do not destroy it,
      * if buffer is still valid */
+     
     if (pkt->buffer_id != NO_BUFFER) {
         if (dp_buffers_is_alive(pkt->dp->buffers, pkt->buffer_id)) {
             return;
@@ -128,7 +128,7 @@ packet_to_string(struct packet *pkt) {
     fprintf(stream, "\", buffer=\"");
     ofl_buffer_print(stream, pkt->buffer_id);
     fprintf(stream, "\", std=");
-    packet_handle_std_print(stream, pkt->handle_std);
+    //packet_handle_std_print(stream, pkt->handle_std);
     fprintf(stream, "}");
 
     fclose(stream);
