@@ -151,10 +151,11 @@ in_band_local_packet_cb(struct relay *r, void *in_band_)
     if (!get_ofp_packet_eth_header(r, &opi, &eth) || !in_band->of_device) {
         return false;
     }
-    in_port = ntohs(opi->in_port);
+    /*TODO: OFP 1.2 change */
+    in_port = 0;
+    //in_port = ntohs(opi->in_port);
     get_ofp_packet_payload(opi, &payload);
     flow_extract(&payload, in_port, &flow);
-
     /* Deal with local stuff. */
     if (in_port == OFPP_LOCAL) {
         /* Sent by secure channel. */
@@ -259,9 +260,9 @@ in_band_status_cb(struct status_reply *sr, void *in_band_)
 void
 get_ofp_packet_payload(struct ofp_packet_in *opi, struct ofpbuf *payload)
 {
-    payload->data = opi->data;
-    payload->size = ntohs(opi->header.length) - offsetof(struct ofp_packet_in,
-                                                         data);
+    //payload->data = opi->data;
+    //payload->size = ntohs(opi->header.length) - offsetof(struct ofp_packet_in,
+      //                                                   data);
 }
 
 static void
