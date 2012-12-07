@@ -98,13 +98,6 @@ OFP_ASSERT(sizeof(struct openflow_ext_set_dp_desc) == 272);
 
 #if 0
 
-enum ofp_queue_prop_ext {
-    OFPQT_EXT_MAX_RATE = OFPQT_MIN + 1,  /* maximum rate limit */
-    OFPQT_EXT_BUF_ALLOC,                 /* buffer alloc config */
-    OFPQT_EXT_SCHED_WEIGHT               /* schedule weight config */
-    OFPQT_EXT_COUNT                      /* Last please */
-};
-
 #define OPENFLOW_QUEUE_PROP_STRINGS_DEF {                        \
     "No property specified"     /* OFPQT_NONE */                 \
     "Minimum Rate",             /* OFPQT_MIN */                  \
@@ -117,14 +110,6 @@ extern char *openflow_queue_prop_strings[];
 #define ofq_prop_string(val) (((val) < OFPQT_EXT_COUNT) && ((val) >= 0) ? \
     openflow_queue_prop_strings[val] : "Unknown property value")
 
-/* These are all the same a min-rate queue property description */
-/* Max-Rate queue property description */
-struct ofp_queue_prop_max_rate {
-    struct ofp_queue_prop_header prop_header; /* prop: OFPQT_MIN, len: 16 */
-    uint16_t rate;            /* in 1/10 of a percent of port BW */
-    uint8_t pad[6];           /* 64-bit alignment */
-};
-OFP_ASSERT(sizeof(struct ofp_queue_prop_max_rate) == 16);
 
 /* Buffer alloc weight queue property description */
 struct ofp_queue_prop_buf_alloc {
