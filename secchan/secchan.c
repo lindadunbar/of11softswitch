@@ -334,25 +334,26 @@ get_ofp_packet_in(struct relay *r)
     struct ofpbuf *msg = r->halves[HALF_LOCAL].rxbuf;
     struct ofp_header *oh = msg->data;
     if (oh->type == OFPT_PACKET_IN) {
-        if (msg->size >= offsetof (struct ofp_packet_in, data)) {
+        //if (msg->size >= offsetof (struct ofp_packet_in, data)) {
             return msg->data;
-        } else {
-            VLOG_WARN(LOG_MODULE, "packet too short (%zu bytes) for packet_in",
-                      msg->size);
-        }
+        //} else {
+          //  VLOG_WARN(LOG_MODULE, "packet too short (%zu bytes) for packet_in",
+            //          msg->size);
+        //}
     }
     return NULL;
 }
 
+/* Need to adapt 1.2 packet-in changes */
 bool
 get_ofp_packet_eth_header(struct relay *r, struct ofp_packet_in **opip,
                           struct eth_header **ethp)
 {
-    const int min_len = offsetof(struct ofp_packet_in, data) + ETH_HEADER_LEN;
+    const int min_len = 0; //offsetof(struct ofp_packet_in, data) + ETH_HEADER_LEN;
     struct ofp_packet_in *opi = get_ofp_packet_in(r);
     if (opi && ntohs(opi->header.length) >= min_len) {
         *opip = opi;
-        *ethp = (void *) opi->data;
+        //*ethp = (void *) opi->data;
         return true;
     }
     return false;

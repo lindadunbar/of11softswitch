@@ -86,12 +86,13 @@ stp_local_packet_cb(struct relay *r, void *stp_)
         || !eth_addr_equals(eth->eth_dst, stp_eth_addr)) {
         return false;
     }
-
-    port_no = ntohs(opi->in_port);
-    if (port_no >= STP_MAX_PORTS) {
-        /* STP only supports 255 ports. */
-        return false;
-    }
+    port_no = 0;
+    /*TODO: Removed to port to OpenFlow 1.2 */
+   // port_no = ntohs(opi->in_port);
+    //if (port_no >= STP_MAX_PORTS) {
+    //    /* STP only supports 255 ports. */
+     //   return false;
+   // }
 	/* TODO Zoltan: Temporarily removed when moving to Openflow 1.1 */
     /*
     if (port_watcher_get_config(stp->pw, port_no) & OFPPC_NO_STP) {
@@ -106,7 +107,7 @@ stp_local_packet_cb(struct relay *r, void *stp_)
 
     get_ofp_packet_payload(opi, &payload);
     flow_extract(&payload, port_no, &flow);
-    if (flow.dl_type != htons(OFP_DL_TYPE_NOT_ETH_TYPE)) {
+    if (flow.dl_type != htons(0x05ff)) {
         VLOG_DBG(LOG_MODULE, "non-LLC frame received on STP multicast address");
         return false;
     }

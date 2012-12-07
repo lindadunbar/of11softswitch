@@ -175,7 +175,8 @@ rate_limit_local_packet_cb(struct relay *r, void *rl_)
     } else {
         /* Otherwise queue it up for the periodic callback to drain out. */
         struct ofpbuf *msg = r->halves[HALF_LOCAL].rxbuf;
-        int port = ntohs(opi->in_port) % OFPP_MAX;
+        /*TODO 1.2 changes to packet_in */
+        int port = 0; //ntohs(opi->in_port) % OFPP_MAX;
         if (rl->n_queued >= s->burst_limit) {
             drop_packet(rl);
         }
